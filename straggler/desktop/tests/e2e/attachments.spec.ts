@@ -279,11 +279,13 @@ test('context recovery points to files when an image consumes the available room
   }
   await choose(page, ['/fixture/diagram.webp']);
   await expect(page.locator('.file-row.is-ready')).toHaveCount(1);
-  const warning = page.getByRole('status').filter({ hasText: 'Little room for the reply' });
-  await expect(warning).toBeVisible();
-  await expect(warning.getByRole('button', { name: 'Summarize and send' })).toHaveCount(0);
+  const counter = page.getByRole('button', { name: 'Context', exact: true });
+  await expect(counter).toHaveAccessibleDescription(/^Little room for the reply/);
   await page.getByRole('button', { name: 'Collapse assistant panel' }).click();
-  await warning.getByRole('button', { name: 'Review files' }).click();
+  await counter.click();
+  const popover = page.getByRole('dialog', { name: 'Context' });
+  await expect(popover.getByRole('button', { name: 'Summarize and send' })).toHaveCount(0);
+  await popover.getByRole('button', { name: 'Review files' }).click();
   const files = page.getByRole('region', { name: 'Attachments' });
   await expect(files).toBeFocused();
   await expect(files.getByRole('button', { name: 'Remove diagram.webp' })).toBeVisible();

@@ -167,31 +167,41 @@ test('all four densities follow measured space with hysteresis and accessible ac
   await page.setViewportSize({ width: 1440, height: 820 });
   await prepare(page, 'on', true);
   const composer = page.locator('.composer');
-  const [fullWidth, compactWidth, iconWidth] = await composer.evaluate((form) => {
-    const footer = form.querySelector('.composer-footer')!;
-    const tools = form.querySelector('.composer-tools')!;
-    const send = form.querySelector('.composer-send')!;
-    const style = getComputedStyle(footer);
-    const overhead =
-      form.getBoundingClientRect().width -
-      footer.clientWidth +
-      parseFloat(style.paddingLeft) +
-      parseFloat(style.paddingRight) +
-      parseFloat(style.columnGap);
-    const original = form.getAttribute('data-density')!;
-    const widths = ['full', 'compact', 'icon'].map((density) => {
-      form.setAttribute('data-density', density);
-      return Math.ceil(
-        tools.getBoundingClientRect().width + send.getBoundingClientRect().width + overhead,
-      );
-    });
-    form.setAttribute('data-density', original);
-    return widths;
-  });
-  // Font metrics and the extra Attach chip alter the breakpoints across engines.
+  const { fullWidth, compactWidth, iconWidth, fullWithHint } = await composer.evaluate(
+    async (form) => {
+      await document.fonts.ready;
+      const footer = form.querySelector('.composer-footer')!;
+      const tools = form.querySelector('.composer-tools')!;
+      const send = form.querySelector('.composer-send')!;
+      const style = getComputedStyle(footer);
+      const overhead =
+        form.getBoundingClientRect().width -
+        footer.clientWidth +
+        parseFloat(style.paddingLeft) +
+        parseFloat(style.paddingRight) +
+        parseFloat(style.columnGap);
+      const original = form.getAttribute('data-density')!;
+      const originalNarrow = form.getAttribute('data-narrow')!;
+      function requiredWidth(density: string) {
+        form.setAttribute('data-density', density);
+        return Math.ceil(
+          tools.getBoundingClientRect().width + send.getBoundingClientRect().width + overhead,
+        );
+      }
+      form.setAttribute('data-narrow', 'true');
+      const [fullWidth, compactWidth, iconWidth] = ['full', 'compact', 'icon'].map(requiredWidth);
+      form.setAttribute('data-narrow', 'false');
+      const fullWithHint = requiredWidth('full');
+      form.setAttribute('data-density', original);
+      form.setAttribute('data-narrow', originalNarrow);
+      return { fullWidth, compactWidth, iconWidth, fullWithHint };
+    },
+  );
+  // Widening the composer can reveal the keyboard hint and raise its minimum width.
+  const widthWithRoomForFull = Math.max(fullWidth, fullWithHint) + 32;
   const transitionWidth = fullWidth - 2;
   for (const [width, density] of [
-    [fullWidth + 32, 'full'],
+    [widthWithRoomForFull, 'full'],
     [transitionWidth, 'compact'],
     [compactWidth - 2, 'icon'],
     [iconWidth - 2, 'wrap'],
@@ -215,9 +225,7 @@ test('all four densities follow measured space with hysteresis and accessible ac
   }, transitionWidth);
   await page.evaluate(() => new Promise(requestAnimationFrame));
   await expect(composer).toHaveAttribute('data-density', 'compact');
-  await composer.evaluate((form, width) => {
-    form.style.width = `${width + 32}px`;
-  }, transitionWidth);
+  await resizeComposer(page, widthWithRoomForFull);
   await expect(composer).toHaveAttribute('data-density', 'full');
 });
 

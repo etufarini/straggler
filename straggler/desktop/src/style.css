@@ -16,7 +16,6 @@
   --ui-reasoning-edge: #3b4c71;
   --ui-accent-edge: #4f86ff;
   --ui-chip-active: #22306a;
-  --ui-context-normal: #6aa2ff;
   --ui-list-hover: #5b74c4;
   --ui-list-focus: #9db4ff;
   --ui-list-surface: #1a2550;
@@ -925,9 +924,12 @@ h1 {
   padding: 10px var(--ui-gutter) 16px;
   flex-shrink: 0;
 }
-.composer {
+.composer,
+.context-recovery {
   width: min(var(--ui-chat-width), 100%);
-  margin: 0 auto;
+  margin-inline: auto;
+}
+.composer {
   background:
     linear-gradient(var(--ui-composer-surface), var(--ui-composer-surface)) padding-box,
     var(--ui-holo-soft) border-box;
@@ -1870,17 +1872,14 @@ input[type='checkbox'] {
   outline: 2px solid var(--ui-focus);
   outline-offset: 2px;
 }
-.context-menu {
-  --ctx-color: var(--ui-context-normal);
+.context-menu.ctx-warning .context-ring {
+  --context-ring-color: var(--ui-warning);
 }
-.context-menu.ctx-high {
-  --ctx-color: #f2c46d;
-}
-.context-menu.ctx-full {
-  --ctx-color: #ff7a8a;
+.context-menu.ctx-error .context-ring {
+  --context-ring-color: var(--ui-error);
 }
 .context-menu .composer-chip {
-  color: var(--ctx-color);
+  color: var(--ui-muted);
   border: 0;
   background: none;
   padding: 0 2px;
@@ -1895,7 +1894,10 @@ input[type='checkbox'] {
   stroke-width: 2;
 }
 .context-ring circle:last-child {
-  stroke: var(--ctx-color);
+  stroke: var(--context-ring-color, var(--ui-muted));
+}
+.ctx-percent {
+  font-variant-numeric: tabular-nums;
 }
 .ctx-figures {
   display: flex;
@@ -1922,14 +1924,16 @@ input[type='checkbox'] {
   background: var(--ui-raised-2);
   overflow: hidden;
 }
-.context-bar::-webkit-progress-bar {
+.context-bar::-webkit-meter-bar {
+  height: 100%;
+  border: 0;
   background: var(--ui-raised-2);
 }
-.context-bar::-webkit-progress-value {
-  background: var(--ctx-color);
+.context-bar::-webkit-meter-optimum-value {
+  background: var(--ui-muted);
 }
-.context-bar::-moz-progress-bar {
-  background: var(--ctx-color);
+.context-bar::-moz-meter-bar {
+  background: var(--ui-muted);
 }
 .ctx-tech {
   color: var(--ui-subtle);
@@ -1954,6 +1958,31 @@ input[type='checkbox'] {
 }
 .ctx-included ul {
   padding-inline-start: 20px;
+}
+.context-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--ui-space-3);
+  margin-block-end: var(--ui-space-2);
+  color: var(--ui-muted);
+  font-size: var(--ui-fs-meta);
+}
+.context-recovery p {
+  flex: 1 1 18rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.context-recovery strong,
+.context-recovery .text-button {
+  color: var(--ui-text);
+}
+.context-recovery .text-button {
+  min-height: 24px;
+  padding-block: 2px;
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .compaction-status {
   display: flex;
@@ -4501,7 +4530,6 @@ body[data-model='cloud'] {
   --ui-quote-edge: #97738f;
   --ui-reasoning-edge: #886480;
   --ui-chip-border: #7c5473;
-  --ui-context-normal: #e5c6dd;
   --ui-select-check: #e5c6dd;
   --ui-inline-code: #e2c8dc;
   --ui-list-hover: #7c5473;

@@ -62,6 +62,6 @@ export function contextWindowUsage(tokens: number, capacity: number | null) {
     capacity,
     percent: Math.round(used * 100),
     remaining: capacity - tokens,
-    level: used >= 0.9 ? 'full' : used >= compactionThresholdPercent / 100 ? 'high' : 'normal',
+    atCompactionThreshold: used >= compactionThresholdPercent / 100,
   } as const;
 }

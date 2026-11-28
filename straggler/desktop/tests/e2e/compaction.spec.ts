@@ -81,23 +81,23 @@ for (const size of ['long', 'small-savings'] as const) {
     const original = await saved(page);
     const counter = page.getByRole('button', { name: 'Context', exact: true });
     const popover = page.getByRole('dialog', { name: 'Context' });
-    const progress = popover.getByRole('progressbar');
+    const meter = popover.getByRole('meter');
     await counter.click();
     await expect(popover).toContainText('Estimated with llama-server tokenization');
     expect(await page.evaluate(() => localStorage.getItem('straggler-fixture-request'))).toBeNull();
-    const before = Number(await progress.getAttribute('value'));
+    const before = Number(await meter.getAttribute('value'));
     expect(before).toBeGreaterThan(0);
-    const beforePercent = await counter.innerText();
+    const beforePercent = await counter.locator('.ctx-percent').innerText();
     await popover.getByRole('button', { name: 'Summarize earlier messages', exact: true }).click();
     const announcement = page.getByRole('status').filter({ hasText: 'tokens freed' });
     await expect(announcement).toBeVisible();
     await counter.click();
     await expect(popover).toContainText('Estimated with llama-server tokenization');
-    const after = Number(await progress.getAttribute('value'));
+    const after = Number(await meter.getAttribute('value'));
     expect(after).toBeLessThan(before);
     const savedTokens = (before - after).toLocaleString('en-US');
     await expect(popover).toContainText(`${savedTokens} tokens freed`);
-    const afterPercent = await counter.innerText();
+    const afterPercent = await counter.locator('.ctx-percent').innerText();
     if (size === 'small-savings') expect(afterPercent).toBe(beforePercent);
     else expect(Number.parseInt(afterPercent)).toBeLessThan(Number.parseInt(beforePercent));
     expect((await saved(page)).messages).toEqual(original.messages);
@@ -227,7 +227,7 @@ test('the next manual compaction becomes available after a reply and advances th
   await expect(update).toHaveAccessibleDescription('Available after the current reply.');
   await page.evaluate(() => localStorage.removeItem('straggler-fixture-response-paused'));
   await expect(update).toBeEnabled();
-  expect(Number.parseInt(await counter.innerText())).toBeLessThan(75);
+  expect(Number.parseInt(await counter.locator('.ctx-percent').innerText())).toBeLessThan(75);
   const continued = await saved(page);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.evaluate(() => {
@@ -384,8 +384,11 @@ for (const shorter of [true, false]) {
       } else {
         await expect(result).toHaveText('No tokens saved. Summary skipped.');
         await expect(
+          page.getByRole('button', { name: 'Context', exact: true }),
+        ).toHaveAccessibleDescription(/^Free up space/);
+        await expect(
           page
-            .getByRole('status')
+            .getByRole('alert')
             .filter({ hasText: 'This message needs more room' })
             .getByRole('button', { name: 'Shorten draft' }),
         ).toBeVisible();
@@ -450,7 +453,13 @@ test('full context compacts in bounded blocks and continues the preserved draft'
   await seed(page, 'normal', 'long');
   const composer = page.getByRole('textbox', { name: 'Message', exact: true });
   await composer.fill('Continue with this exact draft.');
-  await page.getByRole('button', { name: 'Summarize and send', exact: true }).click();
+  const counter = page.getByRole('button', { name: 'Context', exact: true });
+  await expect(counter).toHaveAccessibleDescription(/^Free up space/);
+  await counter.click();
+  await page
+    .getByRole('dialog', { name: 'Context' })
+    .getByRole('button', { name: 'Summarize and send', exact: true })
+    .click();
   await expect(page.locator('.chat-summary')).toBeVisible();
   await expect(page.locator('.assistant .markdown').last()).toContainText('local answer');
   await expect(page.getByRole('button', { name: 'Stop response', exact: true })).toHaveCount(0);
@@ -500,6 +509,14 @@ for (const automatic of [false, true]) {
     const draft = 'D'.repeat(26000);
     const composer = page.getByRole('textbox', { name: 'Message', exact: true });
     await composer.fill(draft);
+    if (automatic) {
+      const counter = page.getByRole('button', { name: 'Context', exact: true });
+      await expect(counter).toHaveAccessibleDescription(/^Will summarize on send/);
+      await expect(counter.getByText('Will summarize on send', { exact: true })).toBeVisible();
+      await expect(page.locator('.context-menu')).toHaveClass(
+        'composer-menu context-menu ctx-warning',
+      );
+    }
     await page
       .getByRole('button', { name: automatic ? 'Send message' : 'Summarize and send', exact: true })
       .click();
@@ -646,7 +663,7 @@ test('a summary that still leaves too little room keeps the original chat and dr
   const composer = page.getByRole('textbox', { name: 'Message', exact: true });
   await composer.fill(draft);
   await page.getByRole('button', { name: 'Summarize and send', exact: true }).click();
-  const recovery = page.getByRole('status').filter({ hasText: 'This message needs more room' });
+  const recovery = page.getByRole('alert').filter({ hasText: 'This message needs more room' });
   await expect(recovery).toContainText(/Free (?:about )?[\d,]+ more tokens/);
   await expect(recovery.getByRole('button', { name: 'Summarize and send' })).toHaveCount(0);
   await expect(recovery.getByRole('button', { name: 'Shorten draft' })).toBeVisible();
@@ -862,9 +879,9 @@ test('an OpenRouter model without response limits skips compaction and can still
   await composer.fill('D'.repeat(8000));
   await page.getByRole('button', { name: 'Context', exact: true }).click();
   const context = page.getByRole('dialog', { name: 'Context' });
-  const progress = context.getByRole('progressbar');
+  const meter = context.getByRole('meter');
   const fraction =
-    Number(await progress.getAttribute('value')) / Number(await progress.getAttribute('max'));
+    Number(await meter.getAttribute('value')) / Number(await meter.getAttribute('max'));
   expect(fraction).toBeGreaterThanOrEqual(0.75);
   expect(fraction).toBeLessThan(1);
   await expect(context.getByRole('button', { name: 'Summarize earlier messages' })).toBeDisabled();

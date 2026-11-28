@@ -16,12 +16,16 @@ export function compactionResultLabel(result: CompactionResult, applied: boolean
 
 export default function ContextCounter({
   controller,
+  blocked,
   onViewSummary,
   recoveryActions,
+  recoveryMessage,
 }: {
   controller: WorkspaceController;
+  blocked: boolean;
   onViewSummary: () => void;
   recoveryActions: { label: string; run: () => void }[];
+  recoveryMessage?: string;
 }) {
   const {
     available,
@@ -41,7 +45,27 @@ export default function ContextCounter({
   const compactReason = controller.compactReason();
   const compactReasonId = useId();
   const comparison = compaction?.result;
-  const showRecovery = replyShortfall > 0 || controller.contextEstimate.overflow;
+  const showRecovery = blocked || replyShortfall > 0 || !!recoveryMessage;
+  let status: { tone: 'warning' | 'error'; label: string } | undefined;
+  if (controller.compactOnSend) {
+    status = { tone: 'warning', label: 'Will summarize on send' };
+  } else if (blocked) {
+    status = { tone: 'error', label: 'Free up space' };
+  } else if (replyShortfall > 0 || controller.contextError?.kind === 'space-after-compaction') {
+    status = { tone: 'warning', label: 'Little room for the reply' };
+  } else if (controller.contextEstimate.atCompactionThreshold) {
+    status = { tone: 'warning', label: 'Getting full' };
+  }
+  const ringDash = usage?.percent
+    ? `${Math.min(100, usage.percent)} 100`
+    : status
+      ? '4 4'
+      : '0 100';
+  const usageLabel = !available
+    ? 'Usage unavailable'
+    : usage
+      ? `${approximate ? 'About ' : ''}${usage.percent}% · ${formatNumber(tokens)} of ${formatNumber(usage.capacity)} tokens`
+      : `${approximate ? 'About ' : ''}${formatNumber(tokens)} tokens · capacity unavailable`;
   const beforeUsage =
     comparison && contextWindowUsage(comparison.before, compaction?.capacity ?? null);
   const afterUsage =
@@ -50,27 +74,16 @@ export default function ContextCounter({
     <Popover
       label="Context"
       heading="Context for next message"
-      valueLabel={
-        !available
-          ? 'Usage unavailable'
-          : usage
-            ? `${approximate ? 'About ' : ''}${usage.percent}% · ${formatNumber(tokens)} of ${formatNumber(usage.capacity)} tokens`
-            : `${approximate ? 'About ' : ''}${formatNumber(tokens)} tokens · capacity unavailable`
-      }
-      className={`context-menu ctx-${usage?.level ?? 'unknown'}`}
+      valueLabel={status ? `${status.label} · ${usageLabel}` : usageLabel}
+      className={`context-menu ctx-${status?.tone ?? 'neutral'}`}
       trigger={
         <>
           <svg className="context-ring" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="9" />
-            <circle
-              cx="12"
-              cy="12"
-              r="9"
-              pathLength="100"
-              strokeDasharray={`${Math.min(100, usage?.percent ?? 0)} 100`}
-            />
+            <circle cx="12" cy="12" r="9" pathLength="100" strokeDasharray={ringDash} />
           </svg>
-          <span>{percent}</span>
+          <span>{status?.label ?? 'Context'}</span>
+          <span className="ctx-percent">{percent}</span>
         </>
       }
     >
@@ -87,8 +100,9 @@ export default function ContextCounter({
               </div>
               {usage ? (
                 <>
-                  <progress
+                  <meter
                     className="context-bar"
+                    min={0}
                     max={usage.capacity}
                     value={Math.min(tokens, usage.capacity)}
                     aria-label="Context for next message"
@@ -102,7 +116,7 @@ export default function ContextCounter({
                         ? 'available for the reply'
                         : 'available'}
                   </p>
-                  {replyTarget > 0 && replyShortfall > 0 && (
+                  {replyShortfall > 0 && !controller.compactOnSend && !recoveryMessage && (
                     <p className="popover-note">
                       Free {approximate ? 'about ' : ''}
                       {formatNumber(replyShortfall)} tokens for a {formatNumber(replyTarget)}-token
@@ -152,6 +166,7 @@ export default function ContextCounter({
               </p>
             )
           )}
+          {recoveryMessage && <p className="popover-note">{recoveryMessage}</p>}
           {compaction && (
             <p className="popover-note ctx-compaction">
               <strong>{compactionResultLabel(compaction.result, compaction.applied)}</strong>
@@ -164,21 +179,19 @@ export default function ContextCounter({
             </p>
           )}
           <div className="ctx-actions">
-            {showRecovery &&
-              !controller.canCompactDraft &&
-              recoveryActions.map(({ label, run }) => (
-                <button
-                  key={label}
-                  type="button"
-                  className="text-button"
-                  onClick={() => {
-                    close();
-                    run();
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
+            {recoveryActions.map(({ label, run }) => (
+              <button
+                key={label}
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  close();
+                  run();
+                }}
+              >
+                {label}
+              </button>
+            ))}
             {controller.chat.summary && (
               <button
                 type="button"

@@ -108,7 +108,7 @@ export function useContextEstimate(
     : 0;
   const replyShortfall = usage ? Math.max(0, replyTarget - usage.remaining) : 0;
   const overflow = available && !!capacity && estimate.tokens + Math.min(1, replyTarget) > capacity;
-  const atCompactionThreshold = !!usage && usage.level !== 'normal';
+  const atCompactionThreshold = usage?.atCompactionThreshold ?? false;
   const canPlanDraft = outputLimitSupported && !!(usage && draft && draftChat.messages.length >= 4);
   const shouldPlanDraft =
     canPlanDraft &&
@@ -171,7 +171,7 @@ export function useContextEstimate(
     if (stopped()) return null;
     if (
       automatic &&
-      contextWindowUsage(original.tokens + imageTokens, capacity)?.level === 'normal'
+      contextWindowUsage(original.tokens + imageTokens, capacity)?.atCompactionThreshold === false
     )
       return null;
     return planned === undefined ? planDraft(original.tokens, stopped) : planned;

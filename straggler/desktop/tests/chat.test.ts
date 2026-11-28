@@ -37,14 +37,13 @@ test('context thresholds use the unrounded ratio and unknown capacity has no per
   expect(contextWindowUsage(749, 1000)).toMatchObject({
     percent: 75,
     remaining: 251,
-    level: 'normal',
+    atCompactionThreshold: false,
   });
-  expect(contextWindowUsage(750, 1000)?.level).toBe('high');
-  expect(contextWindowUsage(900, 1000)?.level).toBe('full');
+  expect(contextWindowUsage(750, 1000)?.atCompactionThreshold).toBe(true);
   expect(contextWindowUsage(1200, 1000)).toMatchObject({
     percent: 120,
     remaining: -200,
-    level: 'full',
+    atCompactionThreshold: true,
   });
   expect(contextWindowUsage(749, null)).toBeNull();
 });
