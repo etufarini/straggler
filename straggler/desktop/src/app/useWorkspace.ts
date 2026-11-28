@@ -24,6 +24,7 @@ import { fieldSection } from '../features/settings/sections';
 import type { Section } from '../features/settings/sections';
 import type { Configuration, ServerStatus, Settings, Confirmation } from '../domain/types';
 type Panel = 'models' | 'settings' | 'logs' | null;
+type LaunchFocus = { opener: Element | null; chatId: string };
 
 export interface ProjectDialog {
   kind: 'create' | 'edit' | 'move' | 'instructions' | 'archive' | 'delete';
@@ -55,6 +56,9 @@ export function useWorkspace() {
     );
   }
   const [panel, updatePanel] = useState<Panel>(null);
+  const modelPickerOpener = useRef<Element | null>(null);
+  const initialLaunchFocus = useRef<LaunchFocus | null>(null);
+  const firstLocalModelReady = useRef(false);
   const [view, setView] = useState<'chat' | 'projects' | 'project'>('chat');
   const [projectId, setProjectId] = useState<string | null>(null);
   const [projectDialog, updateProjectDialog] = useState<ProjectDialog | null>(null);
@@ -217,6 +221,7 @@ export function useWorkspace() {
       leaveTemporary(() => updatePanel(value));
       return;
     }
+    if (value === 'models') modelPickerOpener.current = document.activeElement;
     updatePanel(value);
   }
 
@@ -509,11 +514,46 @@ export function useWorkspace() {
     };
   }, [panel, confirmation, confirmBusy, projectDialog]);
 
+  const chatId = chat.id;
+  const chatArchived = !!currentProject?.archived;
+  useEffect(() => {
+    if (firstLocalModelReady.current || server.phase !== 'ready' || busy || confirmBusy) return;
+    firstLocalModelReady.current = true;
+    const request = initialLaunchFocus.current;
+    initialLaunchFocus.current = null;
+    if (
+      request?.chatId !== chatId ||
+      view !== 'chat' ||
+      chatArchived ||
+      panel ||
+      confirmation ||
+      projectDialog
+    )
+      return;
+
+    const focused = document.activeElement;
+    // The welcome button is removed when the server starts, leaving focus on the page.
+    if (focused === request.opener || (focused === document.body && !request.opener?.isConnected))
+      composerInput.current?.focus();
+  }, [
+    server.phase,
+    busy,
+    confirmBusy,
+    chatId,
+    view,
+    chatArchived,
+    panel,
+    confirmation,
+    projectDialog,
+    composerInput,
+  ]);
+
   useEffect(() => {
     setConfirmError('');
   }, [confirmation]);
 
   async function stop() {
+    initialLaunchFocus.current = null;
     await cancel();
     await sendPromise.current;
     await invoke('stop_server');
@@ -552,8 +592,9 @@ export function useWorkspace() {
           actionLabel: 'Close Straggler',
         });
 
-  async function launch() {
+  async function launch(focus: LaunchFocus | null) {
     if (!draft || !selected) return;
+    initialLaunchFocus.current = focus;
     setBusy(true);
     setError('');
     try {
@@ -564,6 +605,7 @@ export function useWorkspace() {
       setServer(await invoke<ServerStatus>('server_status'));
       setPanel(null);
     } catch (e) {
+      initialLaunchFocus.current = null;
       if (errorDetail(e).field) reportSettingsError(e);
       else setError(errorDetail(e).message);
       throw e;
@@ -574,6 +616,12 @@ export function useWorkspace() {
 
   async function start() {
     if (busy || !selected) return;
+    const focus = firstLocalModelReady.current
+      ? null
+      : {
+          opener: panel === 'models' ? modelPickerOpener.current : document.activeElement,
+          chatId,
+        };
     if (serverActive(server)) {
       setConfirmation({
         title: 'Restart server?',
@@ -581,12 +629,12 @@ export function useWorkspace() {
         text: 'Stop the current server and load the selected configuration? Any active response will be stopped and saved.',
         action: async () => {
           await stop();
-          await launch();
+          await launch(focus);
         },
         actionLabel: 'Restart server',
       });
     } else {
-      await launch().catch(() => {});
+      await launch(focus).catch(() => {});
     }
   }
 

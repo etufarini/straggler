@@ -460,7 +460,11 @@ export function createFixture(scenario: Scenario) {
           error: null,
         } satisfies ServerDetails;
       case 'server_status':
-        return structuredClone(status);
+        return structuredClone(
+          status.phase === 'ready' && localStorage.getItem('straggler-fixture-model-loading')
+            ? { ...status, phase: 'loading', logs: ['Fixture model loading'] }
+            : status,
+        );
       case 'start_server':
         cloud.clear();
         if (occupied) throw new Error(`Port ${settings.port}: IN USE`);
