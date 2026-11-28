@@ -263,7 +263,10 @@ export default function App() {
                   <button
                     className="primary-button"
                     disabled={!native || !selected || busy || !config?.serverAvailable}
-                    onClick={() => void start()}
+                    onClick={(event) => {
+                      event.currentTarget.focus({ preventScroll: true });
+                      void start();
+                    }}
                   >
                     Launch server
                   </button>

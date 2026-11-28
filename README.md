@@ -8,6 +8,10 @@ Chat with local AI models on your Mac or Linux computer. Straggler manages
 llama.cpp from the desktop app. Projects let you share instructions and documents
 across chats.
 
+Straggler takes its name from
+[blue stragglers](https://science.nasa.gov/missions/hubble/hubble-sees-an-unexpected-population-of-young-looking-stars/),
+stars that appear bluer and younger than their neighbors in a star cluster.
+
 ## Download
 
 Straggler 1.0.0 is available for these platforms:

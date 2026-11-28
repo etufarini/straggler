@@ -81,8 +81,10 @@ have no bundled backend unless one has been explicitly prepared.
    separately for reply settings. The [settings reference](#settings-reference)
    explains the controls.
 3. Select **Back to chat**, then **Launch server**. Wait for the status to change
-   from **Loading** to **Ready**. If startup fails, open the status badge for the
-   log and follow [troubleshooting](#server-controls-and-troubleshooting).
+   from **Loading** to **Ready**. On the first launch, the message field receives
+   keyboard focus if you have left focus on the launch control. If startup fails,
+   open the status badge for the log and follow
+   [troubleshooting](#server-controls-and-troubleshooting).
 4. Type a message and select **Send message**. The response appears in the chat.
    Select **Stop response** if you want to stop generation and keep the text
    received so far.

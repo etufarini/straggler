@@ -47,6 +47,49 @@ async function sentText(page: Page) {
   });
 }
 
+async function holdFirstModelLoad(page: Page) {
+  await page.addInitScript(() => localStorage.setItem('straggler-fixture-model-loading', 'true'));
+  await page.goto('/?scenario=normal');
+  await expect(message(page)).not.toBeEditable();
+}
+
+async function finishFirstModelLoad(page: Page) {
+  await expect(page.getByRole('button', { name: 'Server log · Loading' })).toBeVisible();
+  await expect(message(page)).not.toBeEditable();
+  await page.evaluate(() => localStorage.removeItem('straggler-fixture-model-loading'));
+  await expect(page.getByRole('button', { name: 'Server log · Ready' })).toBeVisible();
+  await expect(message(page)).toBeEditable();
+}
+
+for (const [entry, buttonName] of [
+  ['launch button', /^Launch server$/],
+  ['model selector', /^Choose model · /],
+  ['welcome button', /^Choose a model to get started/],
+] as const) {
+  test(`the first local model focuses the message field from the ${entry}`, async ({ page }) => {
+    await holdFirstModelLoad(page);
+    const button = page.getByRole('button', { name: buttonName });
+    if (entry === 'launch button') await button.press('Enter');
+    else {
+      await button.click();
+      await page.getByRole('button', { name: 'Use model', exact: true }).click();
+    }
+    await finishFirstModelLoad(page);
+    await expect(message(page)).toBeFocused();
+    await page.keyboard.type('My first message');
+    await expect(message(page)).toHaveText('My first message');
+    await expect(page.getByRole('button', { name: 'Send message' })).toBeEnabled();
+  });
+}
+
+test('the first local model preserves focus moved during loading', async ({ page }) => {
+  await holdFirstModelLoad(page);
+  await page.getByRole('button', { name: 'Launch server', exact: true }).click();
+  await page.getByRole('button', { name: 'Server log · Loading' }).focus();
+  await finishFirstModelLoad(page);
+  await expect(page.getByRole('button', { name: 'Server log · Ready' })).toBeFocused();
+});
+
 for (const [typed, tag] of [
   ['*bold*', 'strong'],
   ['**bold**', 'strong'],

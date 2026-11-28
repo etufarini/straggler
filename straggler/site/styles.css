@@ -1,0 +1,402 @@
+:root {
+  color-scheme: dark;
+  /* Use the desktop chat palette from ../desktop/src/style.css. */
+  --sky: #141d3d;
+  --deep: #080d26;
+  --surface: #10182f;
+  --raised: #1a2450;
+  --action-surface: #24315f;
+  --text: #f3f6ff;
+  --muted: #b3c0e6;
+  --accent: #9cbcff;
+  --focus: #7196ff;
+  --outline: #3a4c8a;
+  --line: #2e3d72;
+  /* The three tones of the brand mark. */
+  --mark-pale: #b3c0e6;
+  --mark-cyan: #5fd6ff;
+  --mark-blue: #2f63f2;
+  --side-padding: clamp(1.25rem, 4vw, 3rem);
+  --section-padding: clamp(3rem, 7vw, 5.5rem);
+  --space-small: 0.5rem;
+  --space-medium: 1rem;
+  --space-large: 1.5rem;
+  --space-wide: 2rem;
+  --space-xlarge: 2.5rem;
+  /* Paint the page colour on the root so nothing repeats below short pages. */
+  background: var(--deep);
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  line-height: 1.6;
+  scroll-behavior: smooth;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(60rem 36rem at 50% 30rem, #4f86ff3d, transparent 70%),
+    linear-gradient(180deg, var(--sky), transparent 70rem),
+    url("assets/starfield.svg") 0 0 / 45rem;
+  color: var(--text);
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: clamp(2.75rem, 1.5rem + 5.5vw, 5.5rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+h1 span {
+  color: var(--accent);
+}
+
+h2 {
+  max-width: 22ch;
+  font-size: clamp(1.75rem, 1.25rem + 2vw, 2.75rem);
+  letter-spacing: -0.035em;
+}
+
+h3 {
+  font-size: 1.25rem;
+  letter-spacing: -0.015em;
+}
+
+.site-width {
+  width: min(72rem, calc(100% - 2 * var(--side-padding)));
+  margin-inline: auto;
+}
+
+.skip-link {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 0.75rem;
+  inset-inline-start: var(--side-padding);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+
+.skip-link:not(:focus) {
+  clip-path: inset(50%);
+}
+
+.site-header {
+  border-block-end: 1px solid var(--line);
+  background: #10182fb8;
+  backdrop-filter: blur(8px);
+}
+
+.header-inner,
+.footer-inner {
+  padding-block: 0.75rem;
+}
+
+.header-inner,
+.brand,
+.link-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.header-inner {
+  justify-content: space-between;
+  gap: 0.25rem 1.25rem;
+}
+
+.brand {
+  min-height: 2.75rem;
+  gap: var(--space-small);
+  color: var(--text);
+  font-size: 1.125rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.link-row {
+  gap: var(--space-small) var(--space-large);
+}
+
+.link-row a {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  font-size: 0.9375rem;
+  font-weight: 550;
+}
+
+.header-links {
+  gap: 0 0.375rem;
+}
+
+.icon-link {
+  min-width: 2.75rem;
+  justify-content: center;
+  border-radius: 0.5rem;
+}
+
+.icon-link:hover {
+  background: var(--action-surface);
+}
+
+.header-inner nav a,
+.site-footer a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.header-inner nav a:hover,
+.site-footer a:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.hero {
+  display: grid;
+  justify-items: center;
+  padding-block: var(--section-padding);
+  text-align: center;
+}
+
+.hero-lead {
+  max-width: 50ch;
+  margin-block: var(--space-large);
+  color: var(--muted);
+  font-size: clamp(1.0625rem, 0.95rem + 0.6vw, 1.3125rem);
+  text-wrap: balance;
+}
+
+.hero-actions {
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.hero-note {
+  margin-block-start: var(--space-medium);
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+/* The screenshot ends with an empty strip below the app window; crop it. */
+.app-window {
+  overflow: hidden;
+  aspect-ratio: 2400 / 1576;
+  margin-block-start: clamp(var(--space-xlarge), 6vw, 4.5rem);
+  border: 1px solid var(--outline);
+  border-radius: clamp(0.5rem, 1.2vw, 1rem);
+  box-shadow:
+    0 -1.5rem 6rem #4f86ff38,
+    0 2rem 5rem #050a1fb3;
+}
+
+.button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-small);
+  padding: 0.65rem 1.15rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  font-weight: 650;
+  text-align: center;
+  text-decoration: none;
+}
+
+.link-row .button {
+  font-size: 1rem;
+}
+
+.play-mark {
+  width: 0.625rem;
+  height: 0.75rem;
+  flex: none;
+  background: currentColor;
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+
+a.button-primary {
+  background: linear-gradient(180deg, #3568f5, #2b5de8);
+  color: #fff;
+}
+
+a.button-primary:hover {
+  background: linear-gradient(180deg, #4675f7, #3166f2);
+}
+
+a.button-secondary {
+  border-color: var(--outline);
+  background: #10182fb8;
+  color: var(--text);
+}
+
+a.button-secondary:hover {
+  background: var(--action-surface);
+}
+
+.section {
+  padding-block: var(--section-padding);
+  border-block-start: 1px solid var(--line);
+}
+
+.section-intro {
+  max-width: 52ch;
+  margin-block-start: var(--space-medium);
+  color: var(--muted);
+  font-size: 1.0625rem;
+}
+
+.features,
+.packages {
+  display: grid;
+  gap: var(--space-large);
+  margin-block-start: var(--space-xlarge);
+}
+
+.features {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-xlarge);
+}
+
+/* A short rule in one brand-mark tone opens each feature. */
+.feature {
+  padding-block-start: var(--space-medium);
+  border-block-start: 2px solid var(--mark-pale);
+}
+
+.feature:nth-child(2) {
+  border-color: var(--mark-cyan);
+}
+
+.feature:nth-child(3) {
+  border-color: var(--mark-blue);
+}
+
+.feature p,
+.package p {
+  margin-block-start: var(--space-small);
+  color: var(--muted);
+}
+
+.name-origin {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  align-items: center;
+  gap: var(--space-xlarge);
+}
+
+.packages {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-block-start: var(--space-wide);
+}
+
+.package {
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+  border: 1px solid var(--outline);
+  border-radius: 1rem;
+  background-color: var(--surface);
+  background-color: color-mix(in srgb, var(--raised) 72%, transparent);
+  background-image: linear-gradient(180deg, #ffffff0d, transparent 70%);
+  box-shadow: inset 0 1px 0 #ffffff14;
+  backdrop-filter: blur(8px);
+}
+
+/* A hairline sets the caveat apart from the platform requirements. */
+.package .package-note {
+  margin-block-start: var(--space-medium);
+  padding-block-start: var(--space-medium);
+  border-block-start: 1px solid var(--line);
+  font-size: 0.9375rem;
+}
+
+.download-details {
+  margin-block-start: var(--space-wide);
+}
+
+.site-footer {
+  border-block-start: 1px solid var(--line);
+  background: #080d26b8;
+}
+
+@media (max-width: 52rem) {
+  .features,
+  .name-origin {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .features {
+    gap: var(--space-large);
+  }
+
+  .name-origin img {
+    max-width: 24rem;
+    margin-inline: auto;
+  }
+}
+
+@media (max-width: 36rem) {
+  .packages {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .header-inner {
+    column-gap: var(--space-small);
+  }
+
+  .header-links {
+    column-gap: 0.125rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    scroll-behavior: auto;
+  }
+}
