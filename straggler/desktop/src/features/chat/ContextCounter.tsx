@@ -1,114 +1,227 @@
+import { useId } from 'react';
 import Popover from '../../components/Popover';
+import { contextWindowUsage } from '../../domain/chat';
+import { summarizeMessagesLabel } from '../../domain/compaction';
+import type { CompactionResult } from '../../domain/compaction';
 import type { WorkspaceController } from '../../app/useWorkspace';
 
-export default function ContextCounter({ controller }: { controller: WorkspaceController }) {
-  const estimate = controller.contextEstimate;
-  const usage = controller.contextUsage;
-  const estimated = controller.contextEstimated;
-  const label = usage
-    ? usage.level === 'full'
-      ? 'Almost full'
-      : usage.level === 'high'
-        ? 'Getting full'
-        : 'Plenty of room'
-    : 'Unavailable';
+const formatNumber = (value: number) => value.toLocaleString('en-US');
+
+export function compactionResultLabel(result: CompactionResult, applied: boolean) {
+  if (!applied) return 'No tokens saved. Summary skipped.';
+  const { before, after, approximate } = result;
+  const difference = `${approximate ? '≈' : ''}${formatNumber(before - after)}`;
+  return `Earlier messages summarized · ${difference} tokens freed`;
+}
+
+export default function ContextCounter({
+  controller,
+  blocked,
+  onViewSummary,
+  recoveryActions,
+  recoveryMessage,
+}: {
+  controller: WorkspaceController;
+  blocked: boolean;
+  onViewSummary: () => void;
+  recoveryActions: { label: string; run: () => void }[];
+  recoveryMessage?: string;
+}) {
+  const {
+    available,
+    tokens,
+    usage,
+    approximate,
+    compaction,
+    includesImages,
+    searchFiles,
+    searchWeb,
+    templated,
+    replyTarget,
+    replyShortfall,
+  } = controller.contextEstimate;
+  const percent = usage ? `${approximate ? '≈' : ''}${usage.percent}%` : '—';
+  const tokenCount = `${approximate ? '≈' : ''}${formatNumber(tokens)}`;
+  const compactReason = controller.compactReason();
+  const compactReasonId = useId();
+  const comparison = compaction?.result;
+  const showRecovery = blocked || replyShortfall > 0 || !!recoveryMessage;
+  let status: { tone: 'warning' | 'error'; label: string } | undefined;
+  if (controller.compactOnSend) {
+    status = { tone: 'warning', label: 'Will summarize on send' };
+  } else if (blocked) {
+    status = { tone: 'error', label: 'Free up space' };
+  } else if (replyShortfall > 0 || controller.contextError?.kind === 'space-after-compaction') {
+    status = { tone: 'warning', label: 'Little room for the reply' };
+  } else if (controller.contextEstimate.atCompactionThreshold) {
+    status = { tone: 'warning', label: 'Getting full' };
+  }
+  const ringDash = usage?.percent
+    ? `${Math.min(100, usage.percent)} 100`
+    : status
+      ? '4 4'
+      : '0 100';
+  const usageLabel = !available
+    ? 'Usage unavailable'
+    : usage
+      ? `${approximate ? 'About ' : ''}${usage.percent}% · ${formatNumber(tokens)} of ${formatNumber(usage.capacity)} tokens`
+      : `${approximate ? 'About ' : ''}${formatNumber(tokens)} tokens · capacity unavailable`;
+  const beforeUsage =
+    comparison && contextWindowUsage(comparison.before, compaction?.capacity ?? null);
+  const afterUsage =
+    comparison && contextWindowUsage(comparison.after, compaction?.capacity ?? null);
   return (
     <Popover
       label="Context"
-      valueLabel={
-        usage
-          ? `${usage.percent}% · ${label} · ${usage.tokens} of ${usage.capacity} tokens`
-          : 'Usage unavailable'
-      }
-      className={`context-menu ctx-${usage?.level || 'unknown'}`}
+      heading="Context for next message"
+      valueLabel={status ? `${status.label} · ${usageLabel}` : usageLabel}
+      className={`context-menu ctx-${status?.tone ?? 'neutral'}`}
       trigger={
         <>
           <svg className="context-ring" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="9" />
-            <circle
-              cx="12"
-              cy="12"
-              r="9"
-              pathLength="100"
-              strokeDasharray={`${Math.min(100, usage?.percent ?? 0)} 100`}
-            />
+            <circle cx="12" cy="12" r="9" pathLength="100" strokeDasharray={ringDash} />
           </svg>
-          <span>{usage ? `${usage.percent}%` : '—'}</span>
-          <span className="visually-hidden">{label}</span>
+          <span>{status?.label ?? 'Context'}</span>
+          <span className="ctx-percent">{percent}</span>
         </>
       }
     >
       {(close) => (
         <>
-          {estimate.includesImages && estimated && (
-            <p className="popover-note" role="status">
-              Includes images (estimate). Image tokens are counted after the response.
-            </p>
-          )}
-          <p className="popover-note">How much of the model’s working memory this chat uses.</p>
-          {usage ? (
+          {available ? (
             <>
               <div className="ctx-figures">
-                <b>{usage.percent}%</b>
+                {usage && <b>{percent}</b>}
                 <span>
-                  {usage.tokens.toLocaleString('en-US')} of {usage.capacity.toLocaleString('en-US')}{' '}
-                  tokens
+                  {tokenCount}
+                  {usage ? ` of ${formatNumber(usage.capacity)}` : ''} tokens
                 </span>
               </div>
-              <progress
-                className="context-bar"
-                max={usage.capacity}
-                value={Math.min(usage.tokens, usage.capacity)}
-                aria-label="Context usage"
-              />
-              <p className="popover-note">
-                {usage.level === 'normal'
-                  ? 'Plenty of room left.'
-                  : `Context is almost full. Compact earlier messages, start a new chat or increase the context size. ${controller.temporary ? 'Original messages stay in this temporary chat.' : 'Original messages stay saved.'} At the limit, replies may stop; context shift, when enabled and supported, discards earlier context.`}
-              </p>
+              {usage ? (
+                <>
+                  <meter
+                    className="context-bar"
+                    min={0}
+                    max={usage.capacity}
+                    value={Math.min(tokens, usage.capacity)}
+                    aria-label="Context for next message"
+                  />
+                  <p className="popover-note">
+                    {approximate ? '≈' : ''}
+                    {formatNumber(Math.abs(usage.remaining))} tokens{' '}
+                    {usage.remaining < 0
+                      ? 'over capacity'
+                      : replyTarget
+                        ? 'available for the reply'
+                        : 'available'}
+                  </p>
+                  {replyShortfall > 0 && !controller.compactOnSend && !recoveryMessage && (
+                    <p className="popover-note">
+                      Free {approximate ? 'about ' : ''}
+                      {formatNumber(replyShortfall)} tokens for a {formatNumber(replyTarget)}-token
+                      reply.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="popover-note">
+                  {controller.cloud.active
+                    ? 'This service does not list the model’s context size.'
+                    : (controller.serverDetails?.error ??
+                      'The local context capacity is unavailable.')}
+                </p>
+              )}
               <p className="ctx-tech">
-                {estimated
-                  ? `${estimate.source === 'approximate' ? (controller.cloud.active ? 'Approximate estimate' : 'Approximate local estimate') : 'Estimated with llama-server tokenization'} of the prompt including attachments${estimate.templated ? ' and the chat template' : ''}.`
-                  : controller.cloud.active
-                    ? `Last response usage reported by ${controller.cloud.active.providerName}.`
-                    : `Last reported response ${usage.source === 'usage' ? 'usage' : 'timings'} from llama-server. After a context shift, response totals may include discarded context.`}
+                {templated
+                  ? 'Estimated with llama-server tokenization and the chat template.'
+                  : 'Approximate token count.'}{' '}
+                {includesImages && 'Includes estimated image tokens. '}
+                {searchFiles && 'File excerpts are selected on send. '}
+                {searchWeb && 'Web search results may add tokens on send.'}
               </p>
+              {showRecovery && (
+                <details className="ctx-included">
+                  <summary>Review what’s included</summary>
+                  <ul>
+                    <li>Applicable instructions and model formatting</li>
+                    {controller.chat.messages.length > 0 && (
+                      <li>Chat history{controller.chat.summary ? ' and summary' : ''}</li>
+                    )}
+                    {!!controller.currentProject?.files.some((file) => file.included) && (
+                      <li>Included project files</li>
+                    )}
+                    {!!controller.chat.attachments?.some(
+                      (file) => !file.image || includesImages,
+                    ) && <li>Chat attachments</li>}
+                    {controller.input.trim() && <li>Current draft</li>}
+                  </ul>
+                </details>
+              )}
             </>
           ) : (
-            <p className="popover-note">
-              {controller.serverDetails?.error ||
-                (controller.cloud.active
-                  ? 'This service does not list the model’s context size.'
-                  : 'Available once the server is running.')}
+            !compactReason && (
+              <p className="popover-note">
+                Project data is unavailable. Reload the project to estimate context.
+              </p>
+            )
+          )}
+          {recoveryMessage && <p className="popover-note">{recoveryMessage}</p>}
+          {compaction && (
+            <p className="popover-note ctx-compaction">
+              <strong>{compactionResultLabel(compaction.result, compaction.applied)}</strong>
+              {compaction.applied && comparison && beforeUsage && afterUsage && (
+                <span>
+                  {comparison.approximate ? '≈' : ''}
+                  {beforeUsage.percent}% → {afterUsage.percent}%
+                </span>
+              )}
             </p>
           )}
-          <button
-            className="text-button"
-            disabled={!!controller.compactReason()}
-            title={controller.compactReason()}
-            onClick={() => {
-              close();
-              void controller.compact();
-            }}
-          >
-            Compact chat
-          </button>
-          {controller.compactReason() && (
-            <p className="popover-note">{controller.compactReason()}</p>
-          )}
-          <p className="ctx-tech">
-            {controller.cloud.active ? (
-              'Window size is advertised by the cloud service'
-            ) : (
-              <>
-                Context size comes from the running server. <code>n_ctx</code>
-              </>
+          <div className="ctx-actions">
+            {recoveryActions.map(({ label, run }) => (
+              <button
+                key={label}
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  close();
+                  run();
+                }}
+              >
+                {label}
+              </button>
+            ))}
+            {controller.chat.summary && (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  close();
+                  onViewSummary();
+                }}
+              >
+                View summary
+              </button>
             )}
-            {controller.serverDetails?.contextSize
-              ? `: ${controller.serverDetails.contextSize.toLocaleString('en-US')} tokens`
-              : ' · unavailable'}
-            .
-          </p>
+            <button
+              type="button"
+              className="text-button"
+              disabled={!!compactReason}
+              aria-describedby={compactReason ? compactReasonId : undefined}
+              onClick={() => {
+                close();
+                void controller.compact();
+              }}
+            >
+              {summarizeMessagesLabel(controller.chat.summary)}
+            </button>
+          </div>
+          {compactReason && (
+            <p className="popover-note" id={compactReasonId}>
+              {compactReason}
+            </p>
+          )}
         </>
       )}
     </Popover>

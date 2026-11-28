@@ -111,7 +111,9 @@ export async function exerciseNativeCloud({
     'native Aurora destination',
   );
   assert.equal((await invokeNative('server_status', {})).phase, 'stopped');
-  await fillField('.rich-composer-field', 'Native cloud question');
+  const firstQuestion =
+    'Native cloud question about keeping the agreed goals and project constraints.';
+  await fillField('.rich-composer-field', firstQuestion);
   await evaluate('document.querySelector(".composer").requestSubmit()');
   await until(
     () => evaluate('!!document.querySelector(".cloud-notice")'),
@@ -127,7 +129,7 @@ export async function exerciseNativeCloud({
     'native cloud stream',
   );
   const chat = (await invokeNative('history_list', {})).find(
-    (value) => value.title === 'Native cloud question',
+    (value) => value.title === firstQuestion,
   );
   assert.equal(chat.messages[1].cloud.providerId, 'openrouter');
   assert.equal(chat.messages[1].metrics.cost, 0.01);
@@ -174,12 +176,12 @@ export async function exerciseNativeCloud({
   await until(
     () =>
       evaluate(
-        '!!Array.from(document.querySelectorAll(".context-menu button")).find(button => button.textContent === "Compact chat" && !button.disabled)',
+        '!!Array.from(document.querySelectorAll(".context-menu button")).find(button => button.textContent === "Summarize earlier messages" && !button.disabled)',
       ),
     'native compaction action',
   );
   await evaluate(
-    'Array.from(document.querySelectorAll(".context-menu button")).find(button => button.textContent === "Compact chat").click()',
+    'Array.from(document.querySelectorAll(".context-menu button")).find(button => button.textContent === "Summarize earlier messages").click()',
   );
   await until(
     () =>
@@ -193,6 +195,14 @@ export async function exerciseNativeCloud({
   assert.equal(compacted.summary.text, 'Native cloud fixture answer.');
   assert.equal(compacted.summary.model, 'cloud-fixture');
   assert.ok(fixture.requests.some((request) => request.maxOutputTokens > 0));
+  await evaluate('document.querySelector(".compaction-status button").click()');
+  await until(
+    () =>
+      evaluate(
+        'document.querySelector(".chat-summary details").open && document.activeElement === document.querySelector(".chat-summary summary")',
+      ),
+    'native summary opened from the completion notice',
+  );
   await writeFile(output, Buffer.from(await screenshot(), 'base64'));
   await evaluate('document.querySelector(".model-switch").click()');
   await evaluate(
@@ -206,11 +216,9 @@ export async function exerciseNativeCloud({
       ),
     'return to local palette and owned server',
   );
+  await evaluate(`document.querySelector('[aria-label="Options for ${firstQuestion}"]').click()`);
   await evaluate(
-    'document.querySelector(\'[aria-label="Options for Native cloud question"]\').click()',
-  );
-  await evaluate(
-    'document.querySelector(\'[role="menuitem"][aria-label="Delete Native cloud question"]\').click()',
+    `document.querySelector('[role="menuitem"][aria-label="Delete ${firstQuestion}"]').click()`,
   );
   await until(
     () => evaluate('!!document.querySelector(".confirmation .danger-button")'),

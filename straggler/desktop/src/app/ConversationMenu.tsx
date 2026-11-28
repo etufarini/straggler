@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import ActionMenu, { controlSlug } from '../components/ActionMenu';
 import type { ActionMenuItem } from '../components/ActionMenu';
+import { summarizeMessagesLabel } from '../domain/compaction';
 import type { Conversation } from '../domain/types';
 
 export default function ConversationMenu({
@@ -116,12 +117,12 @@ export default function ConversationMenu({
   }
   if (onCompact)
     items.push({
-      label: 'Compact chat',
+      label: summarizeMessagesLabel(conversation.summary),
       controlId: 'button-compact-chat',
       icon: <FileArchive size={15} />,
       separatorBefore: true,
       disabled: !!(mutationReason || compactReason),
-      disabledReason: mutationReason || compactReason,
+      disabledReason: compactReason || mutationReason,
       onSelect: onCompact,
     });
   items.push({

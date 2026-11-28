@@ -463,7 +463,8 @@ async fn cloud_generation_requires_consent_but_no_local_server_or_temporary_slot
         let fixture = HttpFixture::new();
         let runtime = runtime(root.path(), &fixture);
         let selection = configured(&runtime.cloud, id).await;
-        runtime.choose_cloud_model(selection.clone()).unwrap();
+        let status = runtime.choose_cloud_model(selection.clone()).unwrap();
+        assert!(status.active.unwrap().output_limit_supported);
         let count = fixture.count();
         assert!(runtime
             .generate(request(selection.clone()), |_| Ok(()))
@@ -532,6 +533,62 @@ async fn cloud_generation_requires_consent_but_no_local_server_or_temporary_slot
     }
 }
 
+#[tokio::test]
+async fn openrouter_rejects_an_unsupported_explicit_output_limit_before_sending() {
+    let root = tempfile::tempdir().unwrap();
+    let fixture = HttpFixture::new();
+    fixture.respond(
+        200,
+        "Content-Type: application/json\r\n",
+        r#"{"data":[{"id":"example","context_length":8192,"supported_parameters":["temperature"]}]}"#,
+    );
+    let runtime = runtime(root.path(), &fixture);
+    let selection = configured(&runtime.cloud, "openrouter").await;
+    let active = runtime
+        .choose_cloud_model(selection.clone())
+        .unwrap()
+        .active
+        .unwrap();
+    assert!(!active.output_limit_supported);
+    let mut preferences = runtime.preferences.read().unwrap();
+    preferences
+        .cloud_notice_seen
+        .insert(selection.provider_id.clone(), active.base_url);
+    runtime.preferences.save(&preferences).unwrap();
+
+    let count = fixture.count();
+    let mut bounded = request(selection.clone());
+    bounded.max_output_tokens = Some(128);
+    assert_eq!(
+        runtime.generate(bounded, |_| Ok(())).await.unwrap_err(),
+        "The selected cloud model does not support a response token limit."
+    );
+    assert_eq!(fixture.count(), count);
+
+    fixture.respond(
+        200,
+        "Content-Type: text/event-stream\r\n",
+        "data: [DONE]\n\n",
+    );
+    assert_eq!(
+        runtime
+            .generate(request(selection), |_| Ok(()))
+            .await
+            .unwrap(),
+        "complete"
+    );
+    assert_eq!(fixture.count(), count + 1);
+    assert!(fixture
+        .requests
+        .lock()
+        .unwrap()
+        .last()
+        .unwrap()
+        .1
+        .get("max_tokens")
+        .is_none());
+}
+
 #[test]
 fn provider_reasoning_adapters_strip_local_fields_and_keep_deepseek_tool_history() {
     for (id, kind) in [
@@ -552,6 +609,7 @@ fn provider_reasoning_adapters_strip_local_fields_and_keep_deepseek_tool_history
                 provider_name: id.into(),
                 base_url: "https://example.org".into(),
                 kind,
+                output_limit_supported: true,
                 model: CloudModel {
                     id: "example".into(),
                     name: "Example".into(),

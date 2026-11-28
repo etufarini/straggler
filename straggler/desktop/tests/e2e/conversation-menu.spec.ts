@@ -24,7 +24,7 @@ test('conversation menu supports keyboard navigation, dismissal and Delete parit
     'Export chat…',
     'Export with reasoning…',
     'Move to project…',
-    'Compact chat',
+    'Summarize earlier messages',
     'Delete',
   ]);
   await expect(items.nth(0)).toBeFocused();

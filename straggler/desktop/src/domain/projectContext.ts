@@ -1,8 +1,11 @@
 import { summarizedMessages } from './compaction';
 import { attachmentBlocks, composeRequest } from './attachments';
+import { withoutRejectedPartialExchanges } from './chat';
 import { ownSystemPrompt } from './projects';
 import type { Project } from './projects';
 import type { Conversation, Message, ProjectPassage, Settings } from './types';
+
+type PromptSettings = Pick<Settings, 'chat_system_prompt'>;
 
 export const projectContextThresholds = { close: 0.75, over: 1 } as const;
 export const projectTokenEstimateCharacters = 4;
@@ -69,7 +72,7 @@ export function projectContextState(
 
 export function resolveProjectSystemPrompt(
   conversation: Conversation,
-  settings?: Settings,
+  settings?: PromptSettings,
   project?: Project,
 ): string {
   if (conversation.projectId) {
@@ -80,13 +83,13 @@ export function resolveProjectSystemPrompt(
   return ownSystemPrompt(conversation) ?? settings?.chat_system_prompt ?? '';
 }
 
-export function projectSystemPrefix(project: Project, settings?: Settings): string {
+export function projectSystemPrefix(project: Project, settings?: PromptSettings): string {
   const instructions = projectInstructions(project, settings);
   const files = attachmentBlocks(project.files.filter((file) => file.included));
   return [instructions, files].filter((part) => part.length > 0).join('\n\n');
 }
 
-export function projectInstructions(project: Project, settings?: Settings): string {
+export function projectInstructions(project: Project, settings?: PromptSettings): string {
   return project.instructions.trim() ? project.instructions : (settings?.chat_system_prompt ?? '');
 }
 
@@ -157,12 +160,11 @@ export function shrinkPassages(sources: ProjectPassage[]): ProjectPassage[] {
 export function assembleProjectRequest(
   conversation: Conversation,
   messages: Message[],
-  settings?: Settings,
+  settings?: PromptSettings,
   project?: Project,
   passages?: ProjectPassage[],
   attachmentPassages?: ProjectPassage[],
   includeReasoning = false,
-  systemRoleSupported: boolean | null = null,
 ) {
   const systemPrompt = resolveProjectSystemPrompt(conversation, settings, project);
   const prefix =
@@ -171,21 +173,20 @@ export function assembleProjectRequest(
       : systemPrompt;
   const retained = summarizedMessages(conversation, messages);
   const turns = composeRequest(
-    retained,
+    withoutRejectedPartialExchanges(retained),
     prefix,
     attachmentPassages === undefined ? (conversation.attachments ?? []) : [],
     includeReasoning,
   );
   if (conversation.summary && retained !== messages) {
-    const summary = `Earlier chat summary (original messages are retained):\n${conversation.summary.text}`;
-    if (systemRoleSupported === true) {
-      if (turns[0]?.role === 'system') turns[0].content += `\n\n${summary}`;
-      else turns.unshift({ role: 'system', content: summary });
-    } else {
-      const lastUser = [...turns].reverse().find((message) => message.role === 'user');
-      if (lastUser) lastUser.content += `\n\n${summary}`;
-      else turns.push({ role: 'user', content: summary });
-    }
+    const quoted = conversation.summary.text
+      .split(/\r\n?|\n/)
+      .map((line) => `> ${line}`)
+      .join('\n');
+    const summary = `Earlier conversation summary (historical context):\n${quoted}`;
+    const firstUser = turns.find((message) => message.role === 'user');
+    if (firstUser) firstUser.content = `${summary}\n\n${firstUser.content}`;
+    else turns.splice(turns[0]?.role === 'system' ? 1 : 0, 0, { role: 'user', content: summary });
   }
   const context = passageContext(passages, attachmentPassages);
   if (context) {

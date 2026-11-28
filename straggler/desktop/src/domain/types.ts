@@ -11,6 +11,7 @@ export interface Settings {
   chat_system_prompt: string;
   chat_reasoning: 'auto' | 'on' | 'off';
   chat_reasoning_effort: string;
+  chat_auto_compact: 'on' | 'off';
   model: string;
   chat_template_file: string;
   mtp: 'off' | 'model' | 'file';
@@ -204,6 +205,7 @@ export const chatSettingKeys = [
   'chat_system_prompt',
   'chat_reasoning',
   'chat_reasoning_effort',
+  'chat_auto_compact',
 ] as const;
 export const sameServerConfiguration = (a: Settings, b: Settings) =>
   Object.keys(a).every(

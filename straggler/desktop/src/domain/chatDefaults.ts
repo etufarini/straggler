@@ -3,7 +3,12 @@ export { generationKeys } from './types';
 import type { Settings } from './types';
 import type { CloudProvider, CloudStatus } from './cloudModels';
 
-export const chatDefaultKeys = ['chat_system_prompt', 'chat_reasoning', ...generationKeys] as const;
+export const chatDefaultKeys = [
+  'chat_system_prompt',
+  'chat_reasoning',
+  'chat_auto_compact',
+  ...generationKeys,
+] as const;
 export type GenerationKey = (typeof generationKeys)[number];
 export type ChatDefaultKey = (typeof chatDefaultKeys)[number];
 export type ChatDefaultValues = Pick<Settings, ChatDefaultKey>;

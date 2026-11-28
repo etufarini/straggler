@@ -4,8 +4,25 @@ import Select from '../../components/Select';
 import ChangedSetting from './ChangedSetting';
 import type { SettingsController } from './useSettings';
 
+const contextPresets = [4096, 8192, 16384, 24576, 32768, 49152, 65536, 131072, 262144];
+
+function contextLabel(value: string) {
+  if (value === 'auto') return 'Auto';
+  if (value === '0') return 'Model maximum';
+  const tokens = Number(value);
+  if (!Number.isSafeInteger(tokens) || tokens <= 0) return null;
+  const count = `${tokens.toLocaleString('en-US')} tokens`;
+  return tokens % 1024 === 0 ? `${tokens / 1024}K · ${count}` : count;
+}
+
 export default function MemorySettings({ controller }: { controller: SettingsController }) {
-  const { config, draft, change, fieldError } = controller;
+  const { config, draft, change, fieldError, server, serverDetails } = controller;
+  const runningContext = server.runningSettings?.context;
+  const actual = serverDetails?.runId === server.runId ? serverDetails?.contextSize : null;
+  const pending =
+    !!runningContext &&
+    (draft.context !== runningContext || draft.model !== server.runningSettings?.model);
+  const selectedContext = contextLabel(draft.context);
   return (
     <>
       <div className="field-grid related-fields">
@@ -15,27 +32,15 @@ export default function MemorySettings({ controller }: { controller: SettingsCon
             id="context-size"
             aria-label="Context size"
             value={
-              [
-                'auto',
-                '0',
-                '4096',
-                '8192',
-                '16384',
-                '24576',
-                '32768',
-                '49152',
-                '65536',
-                '131072',
-                '262144',
-              ].includes(draft.context)
+              ['auto', '0', ...contextPresets.map(String)].includes(draft.context)
                 ? draft.context
                 : 'custom'
             }
             onChange={(value) => change('context', value === 'custom' ? '2048' : value)}
             options={[
               { value: 'auto', label: 'Auto' },
-              { value: '0', label: 'Largest the model supports' },
-              ...[4096, 8192, 16384, 24576, 32768, 49152, 65536, 131072, 262144].map((size) => ({
+              { value: '0', label: 'Model maximum' },
+              ...contextPresets.map((size) => ({
                 value: size,
                 label: `${size / 1024}K`,
               })),
@@ -50,9 +55,28 @@ export default function MemorySettings({ controller }: { controller: SettingsCon
           value={draft.context}
           error={fieldError('context')}
           onChange={(value) => change('context', value)}
-          hint="How much of the chat the model remembers. Auto, a token count, or 0 for the maximum."
+          hint="Auto lets llama.cpp choose. Enter a token count, or 0 for the model maximum."
         />
       </div>
+      <p className="field-help">
+        The context window is shared by instructions, messages, files and the model’s reply.
+      </p>
+      {server.phase === 'ready' && (
+        <p className="field-help">
+          Active context · {actual ? contextLabel(String(actual)) : 'Unavailable'}
+        </p>
+      )}
+      {pending && selectedContext && (
+        <p className="field-help">
+          Next launch · {selectedContext} ·{' '}
+          {draft.context !== config.settings.context || draft.model !== config.settings.model
+            ? 'Apply changes and restart'
+            : 'Restart required'}
+        </p>
+      )}
+      {draft.context === '0' && (
+        <p className="field-help">The model maximum may require more memory.</p>
+      )}
       <div className="settings-note-group">
         <h3>
           Memory format <code className="tech-term">KV cache</code>

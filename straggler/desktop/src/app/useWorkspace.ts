@@ -1,5 +1,4 @@
 import { chatDefaults } from '../domain/chatDefaults';
-import { currentContext } from '../domain/chat';
 import { useCloudModels } from '../features/cloud/useCloudModels';
 import type { CloudSelection } from '../domain/cloudModels';
 import { useWebSearch } from '../features/websearch/useWebSearch';
@@ -91,6 +90,8 @@ export function useWorkspace() {
   });
   const localServerDetails = useServerDetails(server);
   const serverDetails = cloud.active?.model.details ?? localServerDetails;
+  const contextSize =
+    cloud.active || serverDetails?.runId === server.runId ? serverDetails?.contextSize : null;
   const modelReady = !!cloud.active || server.phase === 'ready';
   const visionSupported = serverDetails?.visionSupported === true;
   const projects = useProjects(
@@ -105,17 +106,12 @@ export function useWorkspace() {
   const conversation = useConversation(
     server,
     config?.settings,
-    cloud.active
-      ? serverDetails?.contextSize
-      : serverDetails?.runId === server.runId
-        ? serverDetails?.contextSize
-        : null,
+    contextSize,
     projects,
     storageQueue,
-    visionSupported,
     cloud.active,
     cloud.ensureConsent,
-    serverDetails?.systemRoleSupported,
+    serverDetails,
   );
   const webSearch = useWebSearch(
     ui.preferences,
@@ -138,43 +134,16 @@ export function useWorkspace() {
   const contextEstimate = useContextEstimate(
     conversation.chat,
     conversation.input,
+    conversation.rejectedUserId,
     config?.settings,
     server,
     serverDetails,
+    contextSize,
     currentProject,
-    currentProject ? projects.context(currentProject).search : false,
-    conversation.attachmentSearch,
+    conversation.resourceSearch,
     cloud.active,
-    conversation.webSearchOn &&
-      cloud.active?.kind === 'deepseek' &&
-      serverDetails?.toolsSupported === true,
+    conversation.webSearchOn,
   );
-  const reportedContext = currentContext(
-    conversation.chat.messages,
-    serverDetails,
-    server,
-    cloud.active,
-  );
-  const contextEstimated =
-    (!!conversation.chat.summary ||
-      !!conversation.chat.attachments?.length ||
-      (!!cloud.active && (!reportedContext || !!conversation.input.trim()))) &&
-    !!contextEstimate.capacity &&
-    (!contextEstimate.includesImages || !!conversation.input || !reportedContext);
-  const contextUsage = contextEstimated
-    ? {
-        tokens: contextEstimate.tokens,
-        capacity: contextEstimate.capacity!,
-        percent: Math.round((contextEstimate.tokens / contextEstimate.capacity!) * 100),
-        source: contextEstimate.source,
-        level:
-          contextEstimate.tokens / contextEstimate.capacity! >= 0.9
-            ? 'full'
-            : contextEstimate.tokens / contextEstimate.capacity! >= 0.75
-              ? 'high'
-              : 'normal',
-      }
-    : reportedContext;
   const {
     chatOptionsDisabled,
     flushSaves,
@@ -662,7 +631,13 @@ export function useWorkspace() {
 
   const active = serverActive(server);
   const displayModel = cloud.active?.model.id ?? (active ? server.model : selected);
-  const canSend =
+  const largerContextPending =
+    !cloud.active &&
+    !!draft &&
+    !!contextEstimate.capacity &&
+    Number(draft.context) > contextEstimate.capacity &&
+    draft.context !== server.runningSettings?.context;
+  const canSubmitDraft =
     native &&
     modelReady &&
     !cloud.busy &&
@@ -671,7 +646,6 @@ export function useWorkspace() {
     !chatOptionsDisabled &&
     !busy &&
     !editor &&
-    !contextEstimate.overflow &&
     !currentProject?.archived &&
     (!chat.projectId ||
       (projects.ready &&
@@ -679,14 +653,24 @@ export function useWorkspace() {
         !!currentProject &&
         (projects.context(currentProject).level !== 'over' ||
           projects.context(currentProject).search)));
+  const compactionAllowed =
+    canSubmitDraft &&
+    contextError?.kind !== 'space-after-compaction' &&
+    !conversation.compactReason();
+  const canCompactDraft = compactionAllowed && contextEstimate.canMakeRoomByCompacting;
+  const automaticCompaction = config?.settings.chat_auto_compact === 'on' && compactionAllowed;
+  const compactOnSend =
+    automaticCompaction && canCompactDraft && contextEstimate.atCompactionThreshold;
+  const canSend = canSubmitDraft && (!contextEstimate.overflow || compactOnSend);
 
   return {
     cloud,
     compact: (target = conversation.chatRef.current, continueDraft = false) => {
-      if (conversation.compactReason(target)) return Promise.resolve();
+      if (conversation.compactReason(target) || (continueDraft && !canCompactDraft))
+        return Promise.resolve();
       setView('chat');
       setPanel(null);
-      return conversation.compact(target, continueDraft);
+      return conversation.compact(target, contextEstimate, continueDraft ? 'draft' : undefined);
     },
     compactReason: conversation.compactReason,
     changeSummary: conversation.changeSummary,
@@ -695,8 +679,6 @@ export function useWorkspace() {
     summarizing: conversation.summarizing,
     summaryError: conversation.summaryError,
     setSummaryError: conversation.setSummaryError,
-    compactionDismissed: conversation.compactionDismissed,
-    dismissCompaction: conversation.dismissCompaction,
     useCloudModel,
     modelReady,
     visionSupported,
@@ -736,11 +718,9 @@ export function useWorkspace() {
     chatOptionsDisabled,
     attachments,
     contextEstimate,
-    contextUsage,
-    compactionSuggested: contextEstimate.capacity
-      ? contextEstimate.tokens / contextEstimate.capacity >= 0.75
-      : (contextUsage?.percent ?? 0) >= 75,
-    contextEstimated,
+    largerContextPending,
+    canCompactDraft,
+    compactOnSend,
     contextError,
     branchChat: conversation.branchChat,
     branchError: conversation.branchError,
@@ -794,7 +774,10 @@ export function useWorkspace() {
     composerInput,
     messageList,
     canSend,
-    send,
+    send: () =>
+      automaticCompaction && contextEstimate.shouldMeasureAutoCompaction
+        ? conversation.compact(chat, contextEstimate, 'automatic')
+        : send(),
     sendPromise,
     input,
     cancel,

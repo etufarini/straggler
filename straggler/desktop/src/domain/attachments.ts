@@ -103,6 +103,15 @@ export function approximateTokens(text: string): number {
   return Math.ceil(new TextEncoder().encode(text).length / 4);
 }
 
+export function estimateImageTokens(attachments: Attachment[] = []): number {
+  // This patch count is a rough estimate because the loaded model encodes the image.
+  return attachments.reduce(
+    (count, { image }) =>
+      count + (image ? Math.ceil(image.width / 32) * Math.ceil(image.height / 32) : 0),
+    0,
+  );
+}
+
 export function approximatePromptTokens(
   messages: { content: string; reasoning_content?: string }[],
 ): number {

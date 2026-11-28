@@ -7,6 +7,7 @@ import Select from '../../components/Select';
 import Feedback from '../../components/Feedback';
 import { samplingKeys, samplingPreset } from '../../domain/types';
 import { fieldScope } from '../../domain/chatDefaults';
+import { compactionThresholdPercent } from '../../domain/chat';
 import type { SettingsController } from './useSettings';
 import type { CloudController } from '../cloud/useCloudModels';
 import useChatDefaults from './useChatDefaults';
@@ -63,6 +64,26 @@ export default function ChatDefaults({
         </small>
         <FieldError id={`${id}-prompt-error`} message={errors.chat_system_prompt} />
       </label>
+      <div className="setting-switch">
+        <div className="settings-note-group">
+          <label htmlFor={`${id}-compact`}>Summarize long chats automatically</label>
+          <p id={`${id}-compact-help`} className="field-help">
+            Summarizes earlier messages before sending at {compactionThresholdPercent}% context
+            usage or higher.
+          </p>
+        </div>
+        <button
+          type="button"
+          id={`${id}-compact`}
+          className="toggle-switch"
+          role="switch"
+          aria-checked={values.chat_auto_compact === 'on'}
+          aria-describedby={`${id}-compact-help`}
+          onClick={() =>
+            change({ chat_auto_compact: values.chat_auto_compact === 'on' ? 'off' : 'on' }, true)
+          }
+        />
+      </div>
       <div className="settings-note-group">
         <fieldset className="choice-group" aria-describedby={`${id}-reasoning-help`}>
           <legend>Reasoning</legend>

@@ -310,6 +310,42 @@ async fn temporary_requests_disable_ram_cache_erase_the_advertised_slot_and_neve
 }
 
 #[tokio::test]
+async fn temporary_http_errors_classify_context_rejection_without_exposing_backend_details() {
+    let fixture = Fixture::new();
+    let runtime = fixture.runtime();
+    fixture.ready(&runtime).await;
+    let id = Uuid::new_v4();
+    runtime.begin_temporary(id).unwrap();
+    wait_phase(&runtime, "ready").await;
+
+    for (prompt, expected) in [
+        (
+            "context-reject",
+            "exceed_context_size_error: The prompt exceeds the available context size.",
+        ),
+        (
+            "context-reject-lookalike",
+            "Temporary model request failed (400 Bad Request). The backend did not accept the request.",
+        ),
+        (
+            "malformed-error",
+            "Temporary model request failed (400 Bad Request). The backend did not accept the request.",
+        ),
+    ] {
+        let mut turn = request(Uuid::new_v4(), prompt);
+        turn.temporary_id = Some(id);
+        let error = runtime
+            .generate(turn, |_| panic!("An HTTP error must not emit a delta"))
+            .await
+            .unwrap_err();
+        assert_eq!(error, expected);
+    }
+    runtime.erase_temporary_slot(id).await.unwrap();
+    runtime.finish_temporary(id, None, true).unwrap();
+    runtime.stop().unwrap();
+}
+
+#[tokio::test]
 async fn saving_temporary_attachments_is_explicit_and_storage_failure_preserves_memory_for_retry() {
     let fixture = Fixture::new();
     let runtime = fixture.runtime();

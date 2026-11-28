@@ -1,12 +1,7 @@
-import type { ActiveCloud } from './cloudModels';
-import type {
-  ChatOptions,
-  GenerationMetrics,
-  Message,
-  ServerDetails,
-  ServerStatus,
-  Settings,
-} from './types';
+import { isContextRejection } from './errors';
+import type { ChatOptions, Message, Settings } from './types';
+
+export const compactionThresholdPercent = 75;
 
 export function resolveChatOptions(
   options: ChatOptions | undefined,
@@ -26,34 +21,47 @@ export const inheritedChatOptions: ChatOptions = {
   effort: null,
 };
 
-export function currentContext(
-  messages: Message[],
-  details: ServerDetails | null,
-  server: ServerStatus,
-  cloud: ActiveCloud | null = null,
-) {
-  const last = messages.filter((message) => message.role === 'assistant').at(-1);
-  const metrics: GenerationMetrics | undefined = last?.metrics;
-  if (!details?.contextSize || metrics?.contextTokens === undefined) return null;
-  if (cloud) {
-    if (
-      last?.cloud?.providerId !== cloud.selection.providerId ||
-      last.model !== cloud.selection.modelId
-    )
-      return null;
-  } else if (
-    server.phase !== 'ready' ||
-    details.runId !== server.runId ||
-    metrics.runId !== server.runId
-  )
-    return null;
-  const usagePercent = (metrics.contextTokens / details.contextSize) * 100;
-  const percent = Math.round(usagePercent);
+export function historyForDraft(messages: Message[], rejectedUserId?: string) {
+  if (!rejectedUserId) return messages;
+  const index = messages.findIndex((message) => message.id === rejectedUserId);
+  return index < 0 ? messages : messages.slice(0, index);
+}
+
+function isRejectedPartialReply(message: Message | undefined) {
+  return (
+    message?.role === 'assistant' &&
+    message.status === 'error' &&
+    !!(message.content || message.reasoning) &&
+    !!message.error &&
+    isContextRejection(message.error)
+  );
+}
+
+export function withoutRejectedPartialExchanges(messages: Message[]) {
+  // Keep the failed exchange visible in history while allowing a shorter retry.
+  return messages.filter(
+    (message, index) =>
+      !isRejectedPartialReply(message) &&
+      !(message.role === 'user' && isRejectedPartialReply(messages[index + 1])),
+  );
+}
+
+export function replyTargetTokens(capacity: number, maxTokens?: string, cloud = false) {
+  // Leave room for ordinary replies while keeping small windows usable. Longest reply can
+  // reduce this target, and local prompt-only evaluation deliberately needs no reply room.
+  const target = Math.max(1, Math.min(2048, Math.floor(capacity / 8)));
+  if (maxTokens === '0' && !cloud) return 0;
+  const limit = Number(maxTokens);
+  return limit > 0 ? Math.min(target, limit) : target;
+}
+
+export function contextWindowUsage(tokens: number, capacity: number | null) {
+  if (!capacity) return null;
+  const used = tokens / capacity;
   return {
-    tokens: metrics.contextTokens,
-    capacity: details.contextSize,
-    percent,
-    source: metrics.contextSource,
-    level: usagePercent >= 90 ? 'full' : usagePercent >= 75 ? 'high' : 'normal',
+    capacity,
+    percent: Math.round(used * 100),
+    remaining: capacity - tokens,
+    atCompactionThreshold: used >= compactionThresholdPercent / 100,
   } as const;
 }

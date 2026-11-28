@@ -2,6 +2,7 @@
   "chat_system_prompt": "",
   "chat_reasoning": "auto",
   "chat_reasoning_effort": "auto",
+  "chat_auto_compact": "off",
   "model": "",
   "chat_template_file": "",
   "mtp": "off",

@@ -26,6 +26,7 @@ export interface ActiveCloud {
   providerName: string;
   baseUrl: string;
   kind: CloudKind;
+  outputLimitSupported: boolean;
   model: CloudModel;
 }
 export interface CloudStatus {

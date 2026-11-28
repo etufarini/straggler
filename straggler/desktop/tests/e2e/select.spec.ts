@@ -25,7 +25,7 @@ test(
     await context.press('Home');
     await context.press('ArrowDown');
     await context.press('Enter');
-    await expect(context).toHaveText('Largest the model supports');
+    await expect(context).toHaveText('Model maximum');
     await expect(
       page.getByRole('textbox', { name: 'Custom size (tokens)', exact: true }),
     ).toHaveValue('0');

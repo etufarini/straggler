@@ -12,14 +12,12 @@ export default function AssistantPresence({
   size,
   provider,
   cloud = false,
-  caption,
 }: {
   state: PresenceState;
   metrics?: GenerationMetrics;
   size: number;
   provider?: string;
   cloud?: boolean;
-  caption?: string;
 }) {
   const stage = useRef<HTMLDivElement>(null);
   const renderer = useRef<PresenceRenderer | null>(null);
@@ -95,15 +93,9 @@ export default function AssistantPresence({
       />
       <div className="presence-caption">
         <strong>Straggler</strong>
-        <span role={caption ? 'status' : undefined}>{caption ?? presenceLabels[state].label}</span>
+        <span>{presenceLabels[state].label}</span>
       </div>
-      <div
-        className="presence-rail-status"
-        role={caption ? 'status' : undefined}
-        aria-label={caption}
-      >
-        {caption ? 'Summarizing' : presenceLabels[state].short}
-      </div>
+      <div className="presence-rail-status">{presenceLabels[state].short}</div>
       {visualError && <p className="presence-note">{visualError}</p>}
       {state !== 'offline' && (
         <section className="presence-section" aria-label="Response statistics">

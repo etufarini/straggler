@@ -1,8 +1,11 @@
 use crate::{stream, ChatRequest, Result, Runtime};
 use futures_util::StreamExt;
 use serde_json::{json, Value};
+use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+
+const CONTEXT_SIZE_ERROR: &str = "exceed_context_size_error";
 
 enum Destination {
     Local {
@@ -11,6 +14,61 @@ enum Destination {
         failed: CancellationToken,
     },
     Cloud(Box<crate::cloud::CloudDestination>),
+}
+
+async fn local_request_error(response: reqwest::Response, temporary: bool) -> String {
+    let status = response.status();
+    let temporary_error = || {
+        format!(
+            "Temporary model request failed ({status}). The backend did not accept the request."
+        )
+    };
+    if temporary && status != reqwest::StatusCode::BAD_REQUEST {
+        return temporary_error();
+    }
+
+    let read_body = async {
+        let mut chunks = response.bytes_stream();
+        let mut body = Vec::new();
+        while let Some(chunk) = chunks.next().await {
+            let chunk = chunk?;
+            body.extend_from_slice(&chunk[..chunk.len().min(16384 - body.len())]);
+            if body.len() == 16384 {
+                break;
+            }
+        }
+        Ok::<_, reqwest::Error>(body)
+    };
+    let body = if temporary {
+        // Recover the known error code without exposing private response text or waiting
+        // indefinitely for an error body.
+        match tokio::time::timeout(Duration::from_secs(3), read_body).await {
+            Ok(Ok(body)) => body,
+            _ => return temporary_error(),
+        }
+    } else {
+        match read_body.await {
+            Ok(body) => body,
+            Err(error) => return error.to_string(),
+        }
+    };
+    let parsed: Option<Value> = serde_json::from_slice(&body).ok();
+    let error = parsed.as_ref().and_then(|value| value.get("error"));
+    let context_rejected = error.is_some_and(|error| error["type"] == CONTEXT_SIZE_ERROR);
+    if temporary {
+        return if context_rejected {
+            format!("{CONTEXT_SIZE_ERROR}: The prompt exceeds the available context size.")
+        } else {
+            temporary_error()
+        };
+    }
+
+    let detail = match error.and_then(|error| error["message"].as_str()) {
+        Some(message) if context_rejected => format!("{CONTEXT_SIZE_ERROR}: {message}"),
+        Some(message) => message.to_owned(),
+        None => String::from_utf8_lossy(&body).into_owned(),
+    };
+    format!("Model request failed ({status}): {detail}")
 }
 
 impl Runtime {
@@ -359,33 +417,7 @@ impl Runtime {
                     .cloud
                     .http_error(&cloud.active.selection.provider_id, &response)?);
             }
-            let status = response.status();
-            if request.temporary_id.is_some() {
-                return Err(format!("Temporary model request failed ({status}). The backend did not accept the request."));
-            }
-            let mut bytes = response.bytes_stream();
-            let mut body = Vec::new();
-            while let Some(chunk) = bytes.next().await {
-                let chunk = chunk.map_err(|e| e.to_string())?;
-                body.extend_from_slice(&chunk[..chunk.len().min(16384 - body.len())]);
-                if body.len() == 16384 {
-                    break;
-                }
-            }
-            let text = String::from_utf8_lossy(&body);
-            let detail = serde_json::from_slice::<Value>(&body)
-                .ok()
-                .and_then(|value| {
-                    value["error"]["message"].as_str().map(|message| {
-                        if value["error"]["type"] == "exceed_context_size_error" {
-                            format!("exceed_context_size_error: {message}")
-                        } else {
-                            message.to_owned()
-                        }
-                    })
-                })
-                .unwrap_or_else(|| text.into_owned());
-            return Err(format!("Model request failed ({status}): {detail}"));
+            return Err(local_request_error(response, request.temporary_id.is_some()).await);
         }
         let mut bytes = response.bytes_stream();
         let mut decoder = stream::Decoder::default();

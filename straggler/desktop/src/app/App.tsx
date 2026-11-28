@@ -357,7 +357,6 @@ export default function App() {
               onProjectSource={setProjectSource}
               attachments={controller.attachments}
               state={presence}
-              caption={controller.summarizing ? 'Summarizing earlier messages…' : undefined}
               cloudModel={!!controller.cloud.active}
               cloudProvider={lastResponse?.cloud?.name}
               metrics={lastResponse?.metrics}

@@ -374,7 +374,7 @@ export default function ProjectDetail({
                   >
                     <button
                       type="button"
-                      className="project-switch"
+                      className="toggle-switch"
                       role="switch"
                       aria-checked={file.included}
                       aria-label={`Include ${file.name} in ${context.search ? 'project search' : 'context'}`}

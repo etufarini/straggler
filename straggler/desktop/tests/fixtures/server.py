@@ -129,8 +129,13 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if prompt == 'reject':
-            body = b'{"error":{"message":"Unsupported chat template"}}'
+        if prompt in ('reject', 'context-reject-lookalike', 'malformed-error'):
+            errors = {
+                'reject': b'{"error":{"message":"Unsupported chat template"}}',
+                'context-reject-lookalike': b'{"error":{"type":"invalid_request_error","message":"exceed_context_size_error: private test details"}}',
+                'malformed-error': b'{"error":{"type":"exceed_context_size_error","message":"private test details"',
+            }
+            body = errors[prompt]
             self.send_response(400)
             self.send_header('Content-Length', str(len(body)))
             self.end_headers()

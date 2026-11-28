@@ -11,7 +11,7 @@ pub fn fields() -> impl Iterator<Item = &'static str> {
 }
 
 pub fn chat_default_fields() -> impl Iterator<Item = &'static str> {
-    ["chat_system_prompt", "chat_reasoning"]
+    ["chat_system_prompt", "chat_reasoning", "chat_auto_compact"]
         .into_iter()
         .chain(fields())
 }
@@ -54,27 +54,46 @@ pub fn provider_parameters() -> BTreeMap<String, Vec<&'static str>> {
     .collect()
 }
 
+fn supported_wire_name<'a>(
+    provider: ProviderKind,
+    supported: Option<&[String]>,
+    field: &'a str,
+) -> Option<&'a str> {
+    let name = wire_name(provider, field)?;
+    if provider == ProviderKind::OpenRouter
+        && supported.is_some_and(|values| !values.iter().any(|value| value == name))
+    {
+        return None;
+    }
+    Some(name)
+}
+
+pub fn output_limit_supported(provider: ProviderKind, supported: Option<&[String]>) -> bool {
+    supported_wire_name(provider, supported, "max_tokens").is_some()
+}
+
 pub fn parameters(
     settings: &Settings,
     provider: Option<ProviderKind>,
     supported: Option<&[String]>,
     limit: Option<u32>,
 ) -> Result<Map<String, Value>> {
+    if limit == Some(0) {
+        return Err("The response token limit must be positive.".into());
+    }
+    if limit.is_some() && provider.is_some_and(|kind| !output_limit_supported(kind, supported)) {
+        return Err("The selected cloud model does not support a response token limit.".into());
+    }
     let settings = settings.fields();
     let mut parameters = Map::new();
     for field in fields() {
         let name = match provider {
-            Some(kind) => match wire_name(kind, field) {
+            Some(kind) => match supported_wire_name(kind, supported, field) {
                 Some(name) => name,
                 None => continue,
             },
             None => field,
         };
-        if provider == Some(ProviderKind::OpenRouter)
-            && supported.is_some_and(|values| !values.iter().any(|value| value == name))
-        {
-            continue;
-        }
         let value = if field == "max_tokens" {
             limit
                 .map(|value| value.to_string())
@@ -95,9 +114,6 @@ pub fn parameters(
             continue;
         }
         parameters.insert(name.into(), Value::Number(number));
-    }
-    if limit == Some(0) {
-        return Err("The response token limit must be positive.".into());
     }
     Ok(parameters)
 }

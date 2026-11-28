@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { FileArchive, Pencil, Trash2 } from 'lucide-react';
+import type { Ref } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
 import type { WorkspaceController } from '../../app/useWorkspace';
 import ActionMenu from '../../components/ActionMenu';
 import Feedback from '../../components/Feedback';
@@ -7,7 +8,13 @@ import Markdown from './Markdown';
 import { errorDetail } from '../../domain/errors';
 import { summaryTextError } from '../../domain/compaction';
 
-export default function ChatSummary({ controller }: { controller: WorkspaceController }) {
+export default function ChatSummary({
+  controller,
+  detailsRef,
+}: {
+  controller: WorkspaceController;
+  detailsRef: Ref<HTMLDetailsElement>;
+}) {
   const section = useRef<HTMLElement>(null);
   const [error, setError] = useState('');
   const summary = controller.chat.summary;
@@ -40,18 +47,8 @@ export default function ChatSummary({ controller }: { controller: WorkspaceContr
   }
   return (
     <section ref={section} className="chat-summary" aria-label="Earlier messages summarized">
-      <div className="branch-divider">
-        <FileArchive size={14} />
-        Earlier messages summarized
-      </div>
-      <p className="field-help">
-        {controller.temporary
-          ? 'Original messages stay in this temporary chat.'
-          : 'Original messages stay saved.'}{' '}
-        Files, project instructions and reasoning aren’t summarized.
-      </p>
-      <details className="reasoning" open={editing || undefined}>
-        <summary>Summary</summary>
+      <details ref={detailsRef} className="reasoning" open={editing || undefined}>
+        <summary>Earlier messages summarized</summary>
         {editing ? (
           <div
             className="message-editor"
@@ -94,7 +91,13 @@ export default function ChatSummary({ controller }: { controller: WorkspaceContr
             )}
           </div>
         ) : (
-          <Markdown>{summary.text}</Markdown>
+          <>
+            <p className="field-help">
+              Used alongside recent messages in future replies. You can read the original messages
+              above.
+            </p>
+            <Markdown>{summary.text}</Markdown>
+          </>
         )}
       </details>
       <ActionMenu

@@ -16,7 +16,6 @@
   --ui-reasoning-edge: #3b4c71;
   --ui-accent-edge: #4f86ff;
   --ui-chip-active: #22306a;
-  --ui-context-normal: #6aa2ff;
   --ui-list-hover: #5b74c4;
   --ui-list-focus: #9db4ff;
   --ui-list-surface: #1a2550;
@@ -925,9 +924,12 @@ h1 {
   padding: 10px var(--ui-gutter) 16px;
   flex-shrink: 0;
 }
-.composer {
+.composer,
+.context-recovery {
   width: min(var(--ui-chat-width), 100%);
-  margin: 0 auto;
+  margin-inline: auto;
+}
+.composer {
   background:
     linear-gradient(var(--ui-composer-surface), var(--ui-composer-surface)) padding-box,
     var(--ui-holo-soft) border-box;
@@ -1870,17 +1872,14 @@ input[type='checkbox'] {
   outline: 2px solid var(--ui-focus);
   outline-offset: 2px;
 }
-.context-menu {
-  --ctx-color: var(--ui-context-normal);
+.context-menu.ctx-warning .context-ring {
+  --context-ring-color: var(--ui-warning);
 }
-.context-menu.ctx-high {
-  --ctx-color: #f2c46d;
-}
-.context-menu.ctx-full {
-  --ctx-color: #ff7a8a;
+.context-menu.ctx-error .context-ring {
+  --context-ring-color: var(--ui-error);
 }
 .context-menu .composer-chip {
-  color: var(--ctx-color);
+  color: var(--ui-muted);
   border: 0;
   background: none;
   padding: 0 2px;
@@ -1895,7 +1894,10 @@ input[type='checkbox'] {
   stroke-width: 2;
 }
 .context-ring circle:last-child {
-  stroke: var(--ctx-color);
+  stroke: var(--context-ring-color, var(--ui-muted));
+}
+.ctx-percent {
+  font-variant-numeric: tabular-nums;
 }
 .ctx-figures {
   display: flex;
@@ -1922,19 +1924,91 @@ input[type='checkbox'] {
   background: var(--ui-raised-2);
   overflow: hidden;
 }
-.context-bar::-webkit-progress-bar {
+.context-bar::-webkit-meter-bar {
+  height: 100%;
+  border: 0;
   background: var(--ui-raised-2);
 }
-.context-bar::-webkit-progress-value {
-  background: var(--ctx-color);
+.context-bar::-webkit-meter-optimum-value {
+  background: var(--ui-muted);
 }
-.context-bar::-moz-progress-bar {
-  background: var(--ctx-color);
+.context-bar::-moz-meter-bar {
+  background: var(--ui-muted);
 }
 .ctx-tech {
   color: var(--ui-subtle);
   font-size: var(--ui-fs-badge);
   margin: 10px 0 0;
+}
+.ctx-compaction {
+  display: grid;
+  gap: 2px;
+}
+.ctx-actions {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 16px;
+}
+.ctx-included {
+  margin-top: 8px;
+  color: var(--ui-muted);
+}
+.ctx-included summary {
+  cursor: pointer;
+}
+.ctx-included ul {
+  padding-inline-start: 20px;
+}
+.context-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--ui-space-3);
+  margin-block-end: var(--ui-space-2);
+  color: var(--ui-muted);
+  font-size: var(--ui-fs-meta);
+}
+.context-recovery p {
+  flex: 1 1 18rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.context-recovery strong,
+.context-recovery .text-button {
+  color: var(--ui-text);
+}
+.context-recovery .text-button {
+  min-height: 24px;
+  padding-block: 2px;
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.compaction-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--ui-space-3);
+  width: min(var(--ui-chat-width), 100%);
+  margin: 0 auto;
+  color: var(--ui-muted);
+  font-size: var(--ui-fs-meta);
+}
+.compaction-status:has(> span:not(:empty)) {
+  margin-block-end: 6px;
+}
+.compaction-status > span {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+}
+.compaction-status > span > svg {
+  flex-shrink: 0;
+  color: var(--ui-accent-text);
+}
+.compaction-status .text-button {
+  min-height: 24px;
+  padding-block: 2px;
 }
 .visually-hidden {
   position: absolute;
@@ -2263,11 +2337,6 @@ input:focus-visible {
 .message-actions button:hover:not(:disabled) {
   color: var(--ui-text);
 }
-.message-actions-note {
-  margin: 0 0 0 6px;
-  font-size: var(--ui-fs-badge);
-  color: var(--ui-subtle);
-}
 .message-editor {
   margin-top: 2px;
   border: 1px solid transparent;
@@ -2587,12 +2656,6 @@ input:focus-visible {
 .file-row.is-error .file-meta {
   flex-wrap: wrap;
 }
-.context-overflow {
-  color: var(--ui-danger-text);
-  font-size: var(--ui-fs-meta);
-  margin: 0 0 10px;
-}
-
 /* Projects share the desktop shell, composer, file rows and dialog patterns. */
 /* Sidebar: Projects block sits between New chat and Conversations. */
 .sidebar-projects .section-label {
@@ -3092,7 +3155,7 @@ input:focus-visible {
   align-items: center;
   gap: 2px;
 }
-.project-switch {
+.toggle-switch {
   position: relative;
   width: 34px;
   height: 20px;
@@ -3101,7 +3164,7 @@ input:focus-visible {
   border: 1px solid var(--ui-control-border);
   background: var(--ui-code);
 }
-.project-switch::after {
+.toggle-switch::after {
   content: '';
   position: absolute;
   top: 3px;
@@ -3111,18 +3174,18 @@ input:focus-visible {
   border-radius: 50%;
   background: var(--ui-subtle);
 }
-.project-switch[aria-checked='true'] {
+.toggle-switch[aria-checked='true'] {
   background: var(--ui-accent);
   border-color: var(--ui-accent);
 }
-.project-switch[aria-checked='true']::after {
+.toggle-switch[aria-checked='true']::after {
   left: 17px;
   background: #ffffff;
 }
-.project-switch:hover:not(:disabled) {
+.toggle-switch:hover:not(:disabled) {
   background: var(--ui-raised-2);
 }
-.project-switch[aria-checked='true']:hover:not(:disabled) {
+.toggle-switch[aria-checked='true']:hover:not(:disabled) {
   background: var(--ui-switch-hover);
 }
 .project-side-section .file-row.is-excluded {
@@ -4467,7 +4530,6 @@ body[data-model='cloud'] {
   --ui-quote-edge: #97738f;
   --ui-reasoning-edge: #886480;
   --ui-chip-border: #7c5473;
-  --ui-context-normal: #e5c6dd;
   --ui-select-check: #e5c6dd;
   --ui-inline-code: #e2c8dc;
   --ui-list-hover: #7c5473;
@@ -4513,12 +4575,6 @@ body[data-model='cloud'] a:hover {
   padding: 10px 0;
   border-block: 1px solid var(--ui-section-line);
 }
-.chat-summary .branch-divider {
-  margin: 0 0 10px;
-}
-.context-overflow button {
-  margin-left: 8px;
-}
 
 /* Pointer targets retain a minimum size of 24 × 24 CSS px. */
 .feedback-dismiss {
@@ -4533,9 +4589,9 @@ body[data-model='cloud'] a:hover {
   align-items: center;
   min-height: 24px;
 }
-/* The project file switch is 20 px tall: a transparent hit area brings the target to 24 px
+/* The switch is 20 px tall: a transparent hit area brings the target to 24 px
    without changing its look (::after is the knob, so the hit area uses ::before). */
-.project-switch::before {
+.toggle-switch::before {
   content: '';
   position: absolute;
   inset: -3px -1px;
@@ -5029,6 +5085,12 @@ body {
 }
 .settings-note-group > * {
   margin-block: 0;
+}
+.setting-switch {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--ui-space-4);
 }
 .settings-section .setting-field,
 .model-settings-block .setting-field,

@@ -13,6 +13,7 @@ pub struct Settings {
     pub chat_system_prompt: String,
     pub chat_reasoning: String,
     pub chat_reasoning_effort: String,
+    pub chat_auto_compact: String,
     pub model: String,
     pub chat_template_file: String,
     pub mtp: String,
@@ -53,13 +54,8 @@ impl Settings {
         let left = self.fields();
         let right = other.fields();
         left.iter().all(|(field, value)| {
-            [
-                "chat_system_prompt",
-                "chat_reasoning",
-                "chat_reasoning_effort",
-            ]
-            .contains(&field.as_str())
-                || crate::generation::fields().any(|key| key == field)
+            field == "chat_reasoning_effort"
+                || crate::generation::chat_default_fields().any(|key| key == field)
                 || right.get(field) == Some(value)
         })
     }

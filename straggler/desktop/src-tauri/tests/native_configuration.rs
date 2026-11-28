@@ -421,13 +421,14 @@ fn chat_defaults_reuse_profile_serialization_and_preserve_environment_precedence
         context: "8192".into(),
         temperature: "0.6".into(),
         seed: "42".into(),
+        chat_auto_compact: "on".into(),
         chat_system_prompt: "Literal $(touch unsafe)\nUnicode: caffè ☕".into(),
         ..Settings::default()
     };
     store.save_chat_defaults(&settings).unwrap();
     let path = store.environment.config.join("chat-defaults.conf");
     let data = fs::read_to_string(&path).unwrap();
-    assert_eq!(data.lines().count(), 11);
+    assert_eq!(data.lines().count(), 12);
     assert!(!data.contains("context="));
     assert!(data.lines().all(|line| settings
         .profile_data()
@@ -443,6 +444,17 @@ fn chat_defaults_reuse_profile_serialization_and_preserve_environment_precedence
     assert_eq!(loaded.temperature, "0.6");
     assert_eq!(loaded.seed, "42");
     assert_eq!(loaded.chat_system_prompt, settings.chat_system_prompt);
+    assert_eq!(loaded.chat_auto_compact, "on");
+    assert!(loaded.same_server_configuration(&Settings {
+        chat_auto_compact: "off".into(),
+        ..loaded.clone()
+    }));
+    assert_eq!(
+        Settings::from_profile("model=test.gguf\n")
+            .unwrap()
+            .chat_auto_compact,
+        "off"
+    );
     assert_eq!(loaded.context, "auto");
     let controlled = Store::new(environment(
         work.path(),
@@ -463,6 +475,11 @@ fn chat_defaults_reuse_profile_serialization_and_preserve_environment_precedence
     assert!(merge(&loaded, BTreeMap::from([("context".into(), "4096".into())])).is_err());
     let before = fs::read(&path).unwrap();
     assert!(merge(&loaded, BTreeMap::from([("top_p".into(), "2".into())])).is_err());
+    assert!(merge(
+        &loaded,
+        BTreeMap::from([("chat_auto_compact".into(), "invalid".into())])
+    )
+    .is_err());
     assert_eq!(fs::read(&path).unwrap(), before);
     fs::write(&path, "temperature=broken\n").unwrap();
     assert!(store.save_chat_defaults(&settings).is_err());

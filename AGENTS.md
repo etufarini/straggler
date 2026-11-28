@@ -168,6 +168,20 @@ the PR. Preserve successful and failed run history under normal retention. Avoid
 adding expensive jobs or tools without a concrete uncovered risk and a
 maintenance-cost rationale.
 
+Review pull requests against their agreed scope, supported behavior, and
+repository requirements. A finding blocks merge when evidence shows that the
+change violates an agreed requirement or repository rule, causes a material
+regression or compatibility break, or introduces or increases a material risk
+to security, privacy, or data integrity. State the affected scenario or
+contract, the evidence, and the impact. Record worthwhile non-blocking
+findings as follow-ups.
+
+In subsequent rounds, focus on changes since the previous review and the
+paths they affect. Reopen a resolved finding only when new evidence meets
+the same blocking threshold. Once blockers are resolved, required checks
+pass for the exact PR head and current base, and required approvals are in
+place, end the review and consider the PR ready to merge.
+
 Do not use GitHub Actions for private repositories. Required checks must remain
 executable locally. If existing workflows conflict with this rule, report the
 conflict and obtain approval for the specific workflow changes rather than

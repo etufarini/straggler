@@ -255,4 +255,38 @@ test('a vision-capable server receives owned image identifiers with the message'
   );
   expect(request.imageIds).toHaveLength(1);
   expect(request.conversationId).toBeTruthy();
+  await expect(page.getByRole('button', { name: 'Stop response', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Context', exact: true }).click();
+  const context = page.getByRole('dialog', { name: 'Context' });
+  await expect(context).toContainText('Includes estimated image tokens.');
+  await expect(context).toContainText(/≈[\d,]+ of 4,096 tokens/);
+});
+
+test('context recovery points to files when an image consumes the available room by itself', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('straggler-fixture-context-size', '2048');
+    localStorage.setItem('straggler-fixture-vision', 'true');
+  });
+  await ready(page);
+  const composer = page.getByRole('textbox', { name: 'Message', exact: true });
+  for (const [index, question] of ['First question', 'Second question'].entries()) {
+    await composer.fill(question);
+    await page.getByRole('button', { name: 'Send message' }).click();
+    await expect(page.locator('.assistant .markdown')).toHaveCount(index + 1);
+    await expect(page.getByRole('button', { name: 'Stop response' })).toHaveCount(0);
+  }
+  await choose(page, ['/fixture/diagram.webp']);
+  await expect(page.locator('.file-row.is-ready')).toHaveCount(1);
+  const counter = page.getByRole('button', { name: 'Context', exact: true });
+  await expect(counter).toHaveAccessibleDescription(/^Little room for the reply/);
+  await page.getByRole('button', { name: 'Collapse assistant panel' }).click();
+  await counter.click();
+  const popover = page.getByRole('dialog', { name: 'Context' });
+  await expect(popover.getByRole('button', { name: 'Summarize and send' })).toHaveCount(0);
+  await popover.getByRole('button', { name: 'Review files' }).click();
+  const files = page.getByRole('region', { name: 'Attachments' });
+  await expect(files).toBeFocused();
+  await expect(files.getByRole('button', { name: 'Remove diagram.webp' })).toBeVisible();
 });

@@ -1,4 +1,5 @@
 import { chatDefaults, chatDefaultKeys, generationKeys } from '../domain/chatDefaults';
+import { summaryInstruction } from '../domain/compaction';
 import type { SystemPromptPreset, PresetText } from '../domain/systemPrompts';
 import { availablePresetName } from '../domain/systemPrompts';
 import { searchText } from '../domain/chatSearch';
@@ -678,6 +679,11 @@ export function createFixture(scenario: Scenario) {
         const conversation = structuredClone(args.conversation as Conversation);
         const index = history.findIndex((value) => value.id === conversation.id);
         const previous = history[index];
+        const rejectedSummary = localStorage.getItem('straggler-fixture-fail-summary-save');
+        if (rejectedSummary && conversation.summary?.throughMessageId === rejectedSummary) {
+          localStorage.removeItem('straggler-fixture-fail-summary-save');
+          throw new Error('Disk is full');
+        }
         if (conversation.projectId && projectFixture.find(conversation.projectId).archived)
           throw new Error('Restore the project before making changes.');
         if (previous?.projectId && projectFixture.find(previous.projectId).archived)
@@ -793,10 +799,23 @@ export function createFixture(scenario: Scenario) {
         }
         while (localStorage.getItem('straggler-fixture-generation-paused'))
           await new Promise((resolve) => setTimeout(resolve, 20));
-        if (localStorage.getItem('straggler-fixture-context-rejection'))
-          throw new Error(
-            'HTTP 400: {"error":{"code":400,"type":"exceed_context_size_error","message":"request (5000 tokens) exceeds the available context size (4096 tokens), try increasing it","n_prompt_tokens":5000,"n_ctx":4096}}',
-          );
+        const summarizing = request.messages.some(({ content }) =>
+          content.startsWith(summaryInstruction),
+        );
+        const rejection = localStorage.getItem('straggler-fixture-context-rejection');
+        const contextError =
+          'HTTP 400: {"error":{"code":400,"type":"exceed_context_size_error","message":"request (5000 tokens) exceeds the available context size (4096 tokens), try increasing it","n_prompt_tokens":5000,"n_ctx":4096}}';
+        if (rejection === 'true' || (rejection === 'reply' && !summarizing)) {
+          if (request.temporaryId && !request.cloud) {
+            return {
+              status: 'error',
+              content: '',
+              reasoning: '',
+              error: 'exceed_context_size_error: The prompt exceeds the available context size.',
+            };
+          }
+          throw new Error(contextError);
+        }
         if (scenario === 'compute-error') throw new Error('Compute error.');
         if (scenario === 'model-error') throw new Error('Unsupported chat template');
         generatingConversation = request.conversationId ?? null;
@@ -843,11 +862,21 @@ export function createFixture(scenario: Scenario) {
           request.messages.some((message: { content: string }) => message.content.includes('[A1]'))
         )
           delta.content += '\n\nThe attachment supports this answer [A1].';
-        if (request.maxOutputTokens) {
+        let summaryTruncated = false;
+        if (summarizing) {
           delta.content =
             localStorage.getItem('straggler-fixture-summary-response') ||
             'Goals and decisions retained. Continue the open questions.';
           delta.reasoning = 'Internal reasoning is not part of the summary.';
+          const truncation = localStorage.getItem('straggler-fixture-summary-truncation');
+          if (truncation) {
+            const key = 'straggler-fixture-summary-attempts';
+            const attempts = JSON.parse(localStorage.getItem(key) || '[]');
+            summaryTruncated = truncation === 'always' || attempts.length === 0;
+            attempts.push({ ...request, truncated: summaryTruncated });
+            localStorage.setItem(key, JSON.stringify(attempts));
+            if (summaryTruncated) delta.content = 'Truncated summary fixture';
+          }
         }
         if (scenario === 'burst-stream') {
           delta.content =
@@ -864,6 +893,10 @@ export function createFixture(scenario: Scenario) {
           channel.onmessage({ ...delta, reasoning: '' });
           await new Promise((resolve) => setTimeout(resolve, 1200));
         } else channel.onmessage(delta);
+        if (rejection === 'partial-reply' && !summarizing) {
+          generatingConversation = null;
+          return { ...delta, status: 'error', error: contextError };
+        }
         while (localStorage.getItem('straggler-fixture-response-paused'))
           await new Promise((resolve) => setTimeout(resolve, 20));
         if (['oom', 'oom-and-save-error'].includes(scenario) && !memoryFailureSeen) {
@@ -887,7 +920,9 @@ export function createFixture(scenario: Scenario) {
                 ? 'error'
                 : scenario === 'interrupted'
                   ? 'interrupted'
-                  : 'complete',
+                  : summaryTruncated
+                    ? 'length'
+                    : 'complete',
           error:
             scenario === 'cloud-error'
               ? 'The cloud service has no credit left.'

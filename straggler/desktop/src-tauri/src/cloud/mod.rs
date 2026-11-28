@@ -61,6 +61,7 @@ pub struct ActiveCloud {
     pub provider_name: String,
     pub base_url: String,
     pub kind: ProviderKind,
+    pub output_limit_supported: bool,
     pub model: CloudModel,
 }
 
@@ -489,6 +490,10 @@ impl CloudService {
             provider_name: provider.name,
             base_url: provider.base_url,
             kind: provider.kind,
+            output_limit_supported: crate::generation::output_limit_supported(
+                provider.kind,
+                model.supported_parameters.as_deref(),
+            ),
             model,
         })
     }

@@ -1,7 +1,6 @@
 import { expect, test } from 'vitest';
-import { currentContext, resolveChatOptions } from '../src/domain/chat';
+import { contextWindowUsage, replyTargetTokens, resolveChatOptions } from '../src/domain/chat';
 import { sameServerConfiguration, equalSettings, generationKeys } from '../src/domain/types';
-import type { Message, ServerDetails, ServerStatus } from '../src/domain/types';
 import { defaultSettings } from '../src/services/fixtures';
 
 test('request defaults and overrides are independent of server restart comparisons', () => {
@@ -34,46 +33,26 @@ test('request defaults and overrides are independent of server restart compariso
   expect(sameServerConfiguration(defaultSettings, { ...settings, context: '8192' })).toBe(false);
 });
 
-test('context uses the running capacity, rejects other server runs and keeps unavailable data unknown', () => {
-  const details: ServerDetails = {
-    runId: 'current',
-    contextSize: 100,
-    reasoningSupported: null,
-    effortLevels: [],
-    systemRoleSupported: null,
-    error: null,
-  };
-  const server = { phase: 'ready', runId: 'current' } as ServerStatus;
-  const message = {
-    role: 'assistant',
-    metrics: { runId: 'current', contextTokens: 74, contextSource: 'usage' },
-  } as Message;
-  expect(currentContext([message], details, server)?.level).toBe('normal');
-  expect(
-    currentContext(
-      [{ ...message, metrics: { ...message.metrics, contextTokens: 75 } }],
-      details,
-      server,
-    )?.level,
-  ).toBe('high');
-  expect(
-    currentContext(
-      [{ ...message, metrics: { ...message.metrics, contextTokens: 90 } }],
-      details,
-      server,
-    )?.level,
-  ).toBe('full');
-  expect(
-    currentContext(
-      [{ ...message, metrics: { ...message.metrics, contextTokens: 120 } }],
-      details,
-      server,
-    )?.percent,
-  ).toBe(120);
-  expect(currentContext([message], { ...details, runId: 'old' }, server)).toBeNull();
-  expect(
-    currentContext([{ ...message, metrics: { runId: 'old', contextTokens: 74 } }], details, server),
-  ).toBeNull();
-  expect(currentContext([message], { ...details, contextSize: null }, server)).toBeNull();
-  expect(currentContext([], details, server)).toBeNull();
+test('context thresholds use the unrounded ratio and unknown capacity has no percentage', () => {
+  expect(contextWindowUsage(749, 1000)).toMatchObject({
+    percent: 75,
+    remaining: 251,
+    atCompactionThreshold: false,
+  });
+  expect(contextWindowUsage(750, 1000)?.atCompactionThreshold).toBe(true);
+  expect(contextWindowUsage(1200, 1000)).toMatchObject({
+    percent: 120,
+    remaining: -200,
+    atCompactionThreshold: true,
+  });
+  expect(contextWindowUsage(749, null)).toBeNull();
+});
+
+test('reply headroom follows the window and keeps shorter and prompt-only settings usable', () => {
+  expect(replyTargetTokens(4096, 'auto')).toBe(512);
+  expect(replyTargetTokens(16384, 'auto')).toBe(2048);
+  expect(replyTargetTokens(32768, 'auto')).toBe(2048);
+  expect(replyTargetTokens(16384, '256')).toBe(256);
+  expect(replyTargetTokens(16384, '0')).toBe(0);
+  expect(replyTargetTokens(16384, '0', true)).toBe(2048);
 });

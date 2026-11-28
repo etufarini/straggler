@@ -195,6 +195,30 @@ for (const cleared of [false, true]) {
   });
 }
 
+test('a shortened draft fits without counting the rejected turn again', async ({ page }) => {
+  await mockDesktop(page);
+  await page.goto('/');
+  await loadModel(page);
+  await page.evaluate(() => localStorage.setItem('straggler-fixture-context-rejection', 'true'));
+  const composer = page.getByRole('textbox', { name: 'Message', exact: true });
+  const send = page.getByRole('button', { name: 'Send message', exact: true });
+  await composer.fill('D'.repeat(10000));
+  await send.click();
+  await expect(page.getByText('Response failed', { exact: true })).toBeVisible();
+  await expect(composer).toHaveText('D'.repeat(10000));
+  await page.evaluate(() => localStorage.removeItem('straggler-fixture-context-rejection'));
+  const shortened = 'D'.repeat(8000);
+  await composer.fill(shortened);
+  await expect(send).toBeEnabled();
+  await send.click();
+  await expect(page.getByRole('button', { name: 'Copy response' })).toBeVisible();
+  const request = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('straggler-fixture-request')!),
+  );
+  expect(request.messages).toEqual([{ role: 'user', content: shortened }]);
+  await expect(page.locator('.message.user')).toHaveCount(1);
+});
+
 test('clipboard failure stays beside its response without blocking chat', async ({ page }) => {
   await mockDesktop(page);
   await page.goto('/');

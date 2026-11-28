@@ -22,6 +22,7 @@ pub const PROFILE_FIELDS: &[&str] = &[
     "chat_system_prompt",
     "chat_reasoning",
     "chat_reasoning_effort",
+    "chat_auto_compact",
     "temperature",
     "top_p",
     "top_k",
@@ -177,7 +178,11 @@ impl Settings {
         for name in PROFILE_FIELDS {
             if matches!(
                 *name,
-                "chat_system_prompt" | "chat_reasoning" | "chat_reasoning_effort" | "model"
+                "chat_system_prompt"
+                    | "chat_reasoning"
+                    | "chat_reasoning_effort"
+                    | "chat_auto_compact"
+                    | "model"
             ) {
                 continue;
             }
@@ -234,6 +239,7 @@ impl Settings {
             ("chat_system_prompt", crate::system_prompts::valid_prompt(&self.chat_system_prompt), "System prompt must be valid text of at most 65536 UTF-8 bytes."),
             ("chat_reasoning", matches!(self.chat_reasoning.as_str(), "auto" | "on" | "off"), "Reasoning must use the model default, on or off."),
             ("chat_reasoning_effort", valid_effort(&self.chat_reasoning_effort), "Use a reasoning effort advertised by the loaded chat template or the model default."),
+            ("chat_auto_compact", matches!(self.chat_auto_compact.as_str(), "on" | "off"), "Choose On or Off for automatic chat compaction."),
         ];
         for (name, valid, message) in checks {
             if !valid {

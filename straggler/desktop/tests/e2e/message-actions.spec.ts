@@ -83,7 +83,7 @@ test('generation keeps user copy and disables editing; stopped output gains acti
   await expect(page.getByRole('button', { name: 'Copy message' })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Edit message', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Regenerate response' })).toBeDisabled();
-  await expect(page.getByText('Edit and regenerate when the response ends.')).toBeVisible();
+  await expect(page.getByText('Edit and regenerate when the response ends.')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Copy response' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Stop response' }).click();
   await expect(page.getByRole('button', { name: 'Edit response', exact: true })).toBeEnabled();

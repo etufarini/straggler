@@ -56,6 +56,9 @@ export function createCloudFixture(scenario: string, stopLocal: () => void) {
       providerName: provider.name,
       baseUrl: provider.baseUrl,
       kind: provider.kind,
+      outputLimitSupported:
+        provider.kind !== 'openrouter' ||
+        localStorage.getItem('straggler-fixture-cloud-no-output-limit') !== 'true',
       model,
     };
   }

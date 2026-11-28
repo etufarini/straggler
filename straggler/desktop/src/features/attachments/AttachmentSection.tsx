@@ -10,7 +10,12 @@ export default function AttachmentSection({ controller }: { controller: Attachme
   const id = useId();
   const ready = controller.rows.filter((row) => row.state === 'ready').length;
   return (
-    <section className="presence-section attachments-section" aria-labelledby={`${id}-title`}>
+    <section
+      id="chat-attachments"
+      tabIndex={-1}
+      className="presence-section attachments-section"
+      aria-labelledby={`${id}-title`}
+    >
       <div className="presence-section-heading">
         <h2 id={`${id}-title`}>Attachments</h2>
         <span className="attachments-summary">

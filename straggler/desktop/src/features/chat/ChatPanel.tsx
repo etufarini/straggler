@@ -1,7 +1,7 @@
 import ChatSummary from './ChatSummary';
 import CloudNotice from '../cloud/CloudNotice';
 import { Paperclip } from 'lucide-react';
-import { attachmentTypesLabel } from '../../domain/attachments';
+import { approximateTokens, attachmentTypesLabel } from '../../domain/attachments';
 import RichComposer, { FormattingToggle, composerHint } from './composer/RichComposer';
 import type { ComposerContext } from './composer/commands';
 import WebSearchMenu from '../websearch/WebSearchMenu';
@@ -9,7 +9,7 @@ import WebSearchActivity from '../websearch/WebSearchActivity';
 import Sources from '../websearch/Sources';
 import ReasoningMenu from './ReasoningMenu';
 import SystemPromptMenu from './SystemPromptMenu';
-import ContextCounter from './ContextCounter';
+import ContextCounter, { compactionResultLabel } from './ContextCounter';
 import useComposerDensity from './useComposerDensity';
 import Markdown from './Markdown';
 import {
@@ -23,6 +23,7 @@ import {
   Folder,
   GitBranch,
   Cloud,
+  LoaderCircle,
 } from 'lucide-react';
 import { fileName } from '../../domain/types';
 import type { ProjectPassage } from '../../domain/types';
@@ -44,6 +45,26 @@ export default function ChatPanel({
 }) {
   const [copied, setCopied] = useState('');
   const [composerMode, setComposerMode] = useState<ComposerContext>('text');
+  const summaryDetails = useRef<HTMLDetailsElement>(null);
+  const compaction = controller.contextEstimate.compaction;
+  const [previousCompaction, setPreviousCompaction] = useState<typeof compaction>(null);
+  useEffect(() => {
+    if (controller.summarizing) setPreviousCompaction(compaction);
+  }, [controller.summarizing, compaction]);
+  const showSummaryResult =
+    !controller.summarizing && compaction && compaction !== previousCompaction;
+  function viewSummary() {
+    // Close the popover and let its focus restoration finish before moving to the summary.
+    requestAnimationFrame(() => {
+      const details = summaryDetails.current;
+      if (!details) return;
+      controller.follow.current = false;
+      details.open = true;
+      const heading = details.querySelector('summary');
+      heading?.focus({ preventScroll: true });
+      heading?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    });
+  }
   const toolbarVisible = controller.preferences.formattingToolbarVisible !== false;
   const toggleFormatting = (visible: boolean) =>
     controller.changePreferences({ formattingToolbarVisible: visible });
@@ -136,6 +157,56 @@ export default function ChatPanel({
   const hasBranchPoint =
     branchOrigin && chat.messages.some((message) => message.id === branchOrigin.messageId);
   const attachmentCount = controller.attachments.rows.filter((row) => !!row.attachment).length;
+  const context = controller.contextEstimate;
+  const hasFiles = attachmentCount > 0 || !!project?.files.some((file) => file.included);
+  const reviewFiles = hasFiles
+    ? () => {
+        if (!attachmentCount && project) {
+          controller.openProject(project.id, true);
+          return;
+        }
+        controller.changePreferences({ presenceExpanded: true });
+        requestAnimationFrame(() => {
+          const attachments = document.getElementById('chat-attachments');
+          attachments?.focus({ preventScroll: true });
+          attachments?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+        });
+      }
+    : undefined;
+  const hasDraft = !!input.trim();
+  const recoveryActions = [];
+  if (reviewFiles) recoveryActions.push({ label: 'Review files', run: reviewFiles });
+  if (hasDraft)
+    recoveryActions.push({
+      label: 'Shorten draft',
+      run: () => requestAnimationFrame(() => composerInput.current?.focus()),
+    });
+  if (
+    reviewFiles &&
+    context.replyShortfall &&
+    context.usage &&
+    approximateTokens(input.trim()) + context.replyTarget > context.usage.capacity
+  ) {
+    recoveryActions.reverse();
+  }
+  if (!controller.cloud.active)
+    recoveryActions.push({
+      label: controller.largerContextPending ? 'Review and restart' : 'Context settings',
+      run: () => reviewSettings('model', 'context-size'),
+    });
+  const contextError = controller.contextError;
+  const recoveryError = contextError?.kind === 'other' ? null : contextError;
+  const needsContextRecovery = context.overflow || !!recoveryError;
+  const contextBlocked = context.overflow || recoveryError?.kind === 'space';
+  const showContextRecovery =
+    !generating &&
+    !controller.compactOnSend &&
+    (needsContextRecovery ||
+      (!contextError && !controller.summaryError && context.replyShortfall > 0));
+  const contextRecoveryActions =
+    hasDraft && controller.canCompactDraft && !controller.summaryError
+      ? [{ label: 'Summarize and send', run: () => void controller.compact(chat, true) }]
+      : recoveryActions;
   return (
     <>
       {project && (
@@ -464,7 +535,6 @@ export default function ChatPanel({
                           aria-label={message.role === 'user' ? 'Edit message' : 'Edit response'}
                           title={message.role === 'user' ? 'Edit message' : 'Edit response'}
                           disabled={generating || editingBusy || archived}
-                          aria-describedby={generating ? `actions-busy-${message.id}` : undefined}
                           onClick={() => beginEdit(message)}
                         >
                           <Pencil size={14} />
@@ -496,16 +566,10 @@ export default function ChatPanel({
                               !!controller.storageError ||
                               archived
                             }
-                            aria-describedby={generating ? `actions-busy-${message.id}` : undefined}
                             onClick={() => void regenerate(message.id).catch(() => {})}
                           >
                             <RotateCcw size={14} />
                           </button>
-                        )}
-                        {generating && (
-                          <p className="message-actions-note" id={`actions-busy-${message.id}`}>
-                            Edit and regenerate when the response ends.
-                          </p>
                         )}
                       </div>
                     )}
@@ -529,7 +593,11 @@ export default function ChatPanel({
                   )}
                   {message.id === branchOrigin?.messageId && divider}
                   {message.id === chat.summary?.throughMessageId && (
-                    <ChatSummary key={chat.id + chat.summary.createdAt} controller={controller} />
+                    <ChatSummary
+                      key={chat.id + chat.summary.createdAt}
+                      controller={controller}
+                      detailsRef={summaryDetails}
+                    />
                   )}
                 </div>
               </article>
@@ -602,55 +670,15 @@ export default function ChatPanel({
           ))}
         {controller.summaryError && (
           <Feedback
-            title="Couldn’t compact the chat"
-            details={controller.summaryError}
-            onDismiss={() => controller.setSummaryError('')}
+            title="Couldn’t summarize earlier messages"
+            details={controller.summaryError.details}
+            onDismiss={() => controller.setSummaryError(null)}
           >
-            Original messages are kept. Check the details and try again.
+            {controller.summaryError.message} Original messages are kept.
           </Feedback>
         )}
-        {controller.compactionSuggested &&
-          !controller.contextEstimate.overflow &&
-          !controller.contextError &&
-          chat.messages.length >= 4 &&
-          !controller.compactionDismissed &&
-          !controller.generating && (
-            <Feedback
-              severity="warning"
-              title="This chat is getting long. Compact it to keep going."
-              actions={
-                <>
-                  <button
-                    disabled={!!controller.compactReason()}
-                    title={controller.compactReason()}
-                    onClick={() => void controller.compact()}
-                  >
-                    Compact chat
-                  </button>
-                  <button onClick={controller.dismissCompaction}>Dismiss</button>
-                </>
-              }
-            >
-              {controller.temporary
-                ? 'Original messages stay in memory.'
-                : 'Original messages stay saved.'}
-            </Feedback>
-          )}
-        {(controller.contextEstimate.overflow || controller.contextError) && (
-          <p role="alert" className="context-overflow">
-            {controller.contextEstimate.overflow
-              ? `The prompt and attachments exceed the ${controller.contextEstimate.capacity?.toLocaleString('en-US')}-token context. Remove files, shorten your message or increase the context size.`
-              : controller.contextError}
-            {chat.messages.length >= 4 && (
-              <button
-                disabled={!!controller.compactReason()}
-                title={controller.compactReason()}
-                onClick={() => void controller.compact(chat, true)}
-              >
-                Compact and continue
-              </button>
-            )}
-          </p>
+        {contextError?.kind === 'other' && (
+          <Feedback title="Couldn’t send the message">{contextError.message}</Feedback>
         )}
         {!controller.attachments.visionSupported &&
           controller.attachments.rows.some((row) => row.attachment?.image) && (
@@ -676,12 +704,46 @@ export default function ChatPanel({
             </Feedback>
           )}
         {controller.cloud.notice && <CloudNotice controller={controller.cloud} />}
+        <div className="compaction-status">
+          <span role="status">
+            {controller.summarizing ? (
+              <>
+                <LoaderCircle size={14} className="spin" aria-hidden="true" />
+                {chat.summary ? 'Summarizing more messages…' : 'Summarizing earlier messages…'}
+              </>
+            ) : showSummaryResult ? (
+              compactionResultLabel(compaction.result, compaction.applied)
+            ) : null}
+          </span>
+          {showSummaryResult && chat.summary && (
+            <button type="button" className="text-button" onClick={viewSummary}>
+              View summary
+            </button>
+          )}
+        </div>
+        {showContextRecovery && contextBlocked && (
+          <div className="context-recovery" role="alert">
+            <p>
+              <strong>This message needs more room.</strong>{' '}
+              {recoveryError?.message ??
+                (context.usage?.remaining === 0
+                  ? 'The prompt fills the entire context window. Free space for a reply.'
+                  : `The prompt and attachments exceed the ${context.capacity?.toLocaleString('en-US')}-token context.`)}
+            </p>
+            {contextRecoveryActions.map(({ label, run }) => (
+              <button key={label} type="button" className="text-button" onClick={run}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <form
           ref={composerRef}
           className={`composer${controller.attachments.dragged.length > 0 ? ' is-dragover' : ''}`}
           onSubmit={(event) => {
             event.preventDefault();
             if (canSend) {
+              setPreviousCompaction(compaction);
               const pending = send();
               sendPromise.current = pending;
               void pending;
@@ -741,12 +803,18 @@ export default function ChatPanel({
             </div>
             <div className="composer-send">
               <span className="keyboard-hint">{composerHint(composerMode)}</span>
-              <ContextCounter controller={controller} />
+              <ContextCounter
+                controller={controller}
+                onViewSummary={viewSummary}
+                blocked={contextBlocked}
+                recoveryActions={showContextRecovery ? contextRecoveryActions : []}
+                recoveryMessage={showContextRecovery ? recoveryError?.message : undefined}
+              />
               {generating ? (
                 <button
                   type="button"
                   className="send-button stop"
-                  aria-label="Stop response"
+                  aria-label={controller.summarizing ? 'Stop summarizing' : 'Stop response'}
                   onClick={(event) => {
                     // Stop can become Send before this click's default action runs.
                     event.preventDefault();
